@@ -1,84 +1,96 @@
 import 'package:flutter/material.dart';
-import 'package:ecomerk2/data/services/api_service.dart';
-import 'routes/app_routes.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'screens/login_screen.dart';
+import 'screens/register_screen.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  runApp(const EcoMerca2App());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class EcoMerca2App extends StatelessWidget {
+  const EcoMerca2App({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      title: 'EcoMerca2',
       debugShowCheckedModeBanner: false,
-      title: 'EcoMerk',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
-      ),
-      routes: AppRoutes.routes,
-      home: const AuthCheck(),
-    );
-  }
-}
-
-class AuthCheck extends StatefulWidget {
-  const AuthCheck({super.key});
-  @override
-  State<AuthCheck> createState() => _AuthCheckState();
-}
-
-class _AuthCheckState extends State<AuthCheck> {
-  @override
-  void initState() {
-    super.initState();
-    _verificarSesion();
-  }
-
-  Future<void> _verificarSesion() async {
-    // Espera un momento para mostrar el splash
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    final token = await ApiService.obtenerToken();
-    final userId = await ApiService.obtenerUserId();
-
-    if (token != null && userId != null) {
-      // Ya tiene sesión → va directo al home
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, '/home');
-      }
-    } else {
-      // No tiene sesión → va al login
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, '/login');
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Pantalla de carga mientras verifica
-    return const Scaffold(
-      backgroundColor: Color(0xFFF5F5F5),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('🛒', style: TextStyle(fontSize: 64)),
-            SizedBox(height: 16),
-            Text('EcoMerca2',
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0F6E56),
-              )),
-            SizedBox(height: 24),
-            CircularProgressIndicator(
-              color: Color(0xFF1D9E75),
-            ),
-          ],
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF1D9E75),
         ),
+        useMaterial3: true,
+      ),
+      // Rutas de la app
+      routes: {
+        '/login':    (context) => const LoginScreen(),
+        '/register': (context) => const RegisterScreen(),
+      },
+      // Decide qué pantalla mostrar según si hay sesión activa
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+
+          // Cargando...
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(
+                  color: Color(0xFF1D9E75),
+                ),
+              ),
+            );
+          }
+
+          // Si hay usuario logueado → Dashboard (por ahora pantalla temporal)
+          if (snapshot.hasData) {
+            return Scaffold(
+              appBar: AppBar(
+                title: const Text('EcoMerca2'),
+                backgroundColor: const Color(0xFF1D9E75),
+                foregroundColor: Colors.white,
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.logout),
+                    onPressed: () async {
+                      await FirebaseAuth.instance.signOut();
+                    },
+                  ),
+                ],
+              ),
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('🛒', style: TextStyle(fontSize: 64)),
+                    const SizedBox(height: 16),
+                    Text(
+                      '¡Bienvenido, ${snapshot.data?.displayName ?? 'Usuario'}!',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      snapshot.data?.email ?? '',
+                      style: const TextStyle(
+                        color: Colors.grey,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          // Si no hay sesión → pantalla de Login
+          return const LoginScreen();
+        },
       ),
     );
   }

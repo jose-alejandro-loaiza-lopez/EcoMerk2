@@ -5,6 +5,7 @@ class LoginController {
   final emailController    = TextEditingController();
   final passwordController = TextEditingController();
   final LoginService _service = LoginService();
+  bool loading = false;
 
   Future<Map<String, dynamic>> login() async {
     return await _service.login(

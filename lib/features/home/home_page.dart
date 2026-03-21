@@ -71,27 +71,6 @@ class _HomePageState extends State<HomePage> {
               'Ahorra inteligente cada semana',
               style: TextStyle(color: Colors.grey, fontSize: 14),
             ),
-            const SizedBox(height: 32),
-            // Botón para ir a la lista
-            SizedBox(
-              width: 280,
-              height: 50,
-              child: ElevatedButton.icon(
-                onPressed: () =>
-                    Navigator.pushNamed(context, '/favorites'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1D9E75),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                ),
-                icon: const Icon(Icons.list_alt, color: Colors.white),
-                label: const Text('Ver mi lista de compras',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.white,
-                    )),
-              ),
-            ),
           ],
         ),
       ),
