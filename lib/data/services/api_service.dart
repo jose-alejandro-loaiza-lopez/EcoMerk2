@@ -132,4 +132,19 @@ class ApiService {
       return false;
     }
   }
+
+  static Future<List<dynamic>?> buscarProductos(String query) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/productos?search=$query'),
+      headers: {
+        'Authorization': 'Bearer ${await obtenerToken()}',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      return [];
+    }
+  }
 }
