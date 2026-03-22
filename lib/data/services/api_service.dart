@@ -6,32 +6,27 @@ class ApiService {
   static const String baseUrl =
       'https://usuarios-bd-production.up.railway.app/api/v1';
 
-  // Guardar el token JWT localmente
   static Future<void> guardarToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('jwt_token', token);
   }
 
-  // Obtener el token guardado
   static Future<String?> obtenerToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('jwt_token');
   }
 
-  // Borrar token (cerrar sesión)
   static Future<void> borrarToken() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('jwt_token');
     await prefs.remove('usuario_id');
   }
 
-  // Guardar ID del usuario
   static Future<void> guardarUserId(int id) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('usuario_id', id);
   }
 
-  // Obtener ID del usuario
   static Future<int?> obtenerUserId() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt('usuario_id');
@@ -55,7 +50,6 @@ class ApiService {
           'fechaNacimiento': fechaNacimiento,
         }),
       );
-
       if (response.statusCode == 200 || response.statusCode == 201) {
         return {'exito': true, 'mensaje': 'Cuenta creada exitosamente'};
       } else {
@@ -70,55 +64,37 @@ class ApiService {
     }
   }
 
-// LOGIN
-static Future<Map<String, dynamic>> login({
-  required String email,
-  required String password,
-}) async {
-  try {
-    // Paso 1: hacer login para obtener el token
-    final response = await http.post(
-      Uri.parse('$baseUrl/usuarios/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'email': email,
-        'password': password,
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      final body = jsonDecode(response.body);
-      final token = body['token'];
-      await guardarToken(token);
-
-      // Paso 2: buscar todos los usuarios para obtener el id
-      // por ahora lo guardamos como 0 y lo obtenemos después
-      final usuariosResponse = await http.get(
-        Uri.parse('$baseUrl/usuarios/me'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
+  // LOGIN — el servidor devuelve {"id": X, "token": "...", "mensaje": "..."}
+  static Future<Map<String, dynamic>> login({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/usuarios/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email,
+          'password': password,
+        }),
       );
-
-      if (usuariosResponse.statusCode == 200) {
-        final usuario = jsonDecode(usuariosResponse.body);
-        await guardarUserId(usuario['id']);
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        await guardarToken(body['token']);
+        await guardarUserId(body['id']); // el servidor devuelve el id directo
+        return {'exito': true};
+      } else {
+        return {
+          'exito': false,
+          'mensaje': 'Correo o contraseña incorrectos'
+        };
       }
-
-      return {'exito': true};
-    } else {
-      return {
-        'exito': false,
-        'mensaje': 'Correo o contraseña incorrectos'
-      };
+    } catch (e) {
+      return {'exito': false, 'mensaje': 'No se pudo conectar al servidor'};
     }
-  } catch (e) {
-    return {'exito': false, 'mensaje': 'No se pudo conectar al servidor'};
   }
-}
 
-  // OBTENER USUARIO CON SU LISTA
+  // OBTENER USUARIO — el servidor devuelve {"usuario": {...}, "mensaje": "..."}
   static Future<Map<String, dynamic>?> obtenerUsuario(int id) async {
     try {
       final token = await obtenerToken();
@@ -129,9 +105,9 @@ static Future<Map<String, dynamic>> login({
           'Content-Type': 'application/json',
         },
       );
-
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final body = jsonDecode(response.body);
+        return body['usuario']; // extraer el objeto usuario
       }
       return null;
     } catch (e) {
