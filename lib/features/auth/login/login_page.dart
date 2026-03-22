@@ -52,11 +52,9 @@ class _LoginPageState extends State<LoginPage> {
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
             children: [
-              const SizedBox(height: 60),
-              // Logo
-              Center(
+              const SizedBox(height: 60),              Center(
                 child: Column(children: [
-                  const Text('🛒', style: TextStyle(fontSize: 48)),
+                   const Text('🛒', style: TextStyle(fontSize: 48)),
                   const SizedBox(height: 8),
                   const Text('EcoMerca2',
                     style: TextStyle(
@@ -70,7 +68,6 @@ class _LoginPageState extends State<LoginPage> {
                 ]),
               ),
               const SizedBox(height: 40),
-              // Tarjeta
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -89,7 +86,6 @@ class _LoginPageState extends State<LoginPage> {
                         fontWeight: FontWeight.w600,
                       )),
                     const SizedBox(height: 20),
-                    // Email
                     const Text('Correo electrónico',
                       style: TextStyle(
                         fontSize: 13,
@@ -108,7 +104,6 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // Contraseña
                     const Text('Contraseña',
                       style: TextStyle(
                         fontSize: 13,
@@ -134,7 +129,6 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    // Botón
                     SizedBox(
                       width: double.infinity,
                       height: 50,
@@ -156,7 +150,6 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // Link registro
                     Center(
                       child: GestureDetector(
                         onTap: () =>
