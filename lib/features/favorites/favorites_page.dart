@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:ecomerk2/data/services/api_service.dart';
+import 'package:ecomerk2/data/services/user_api_service.dart';
 
 class FavoritesPage extends StatefulWidget {
   const FavoritesPage({super.key});
