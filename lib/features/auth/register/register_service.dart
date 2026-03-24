@@ -1,4 +1,4 @@
-import 'package:ecomerk2/data/services/api_service.dart';
+import 'package:ecomerk2/data/services/user_api_service.dart';
 
 class RegisterService {
   Future<Map<String, dynamic>> registrar({
