@@ -1,6 +1,6 @@
-# EcoMerca2
+# EcoMerk2
 
-**EcoMerca2** es una plataforma móvil diseñada para optimizar la economía del hogar. A través de la comparación de precios en tiempo real y el uso de Inteligencia Artificial para la gestión de recetas, permitimos que los usuarios ahorren dinero y reduzcan el desperdicio de alimentos.
+**EcoMerk2** es una plataforma móvil diseñada para optimizar la economía del hogar. A través de la comparación de precios en tiempo real y el uso de Inteligencia Artificial para la gestión de recetas, permitimos que los usuarios ahorren dinero y reduzcan el desperdicio de alimentos.
 
 ## 🚀 Funcionalidades Principales
 
