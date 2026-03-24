@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:html/parser.dart' as html_parser;
+import 'package:html/dom.dart' as dom;
 
 class MarketApiService {
   static Future<List<dynamic>> buscarEnTiendas(String query, {String orden = 'OrderByScoreDESC'}) async {
@@ -11,7 +13,6 @@ class MarketApiService {
         _buscarEnExito(query, orden: orden),
         _buscarEnOlimpica(query),
         _buscarEnSurtifamiliar(query),
-        _buscarEnCanaveral(query),
       ]);
 
       for (var lista in resultados) {
@@ -181,57 +182,6 @@ class MarketApiService {
       }
     } catch (e) {
       debugPrint("Error en Surtifamiliar Sort: $e");
-    }
-    return [];
-  }
-
-  static Future<List<dynamic>> _buscarEnCanaveral(String query, {String orden = 'OrderByScoreDESC'}) async {
-    try {
-      final String queryEncoded = Uri.encodeComponent(query);
-
-      // Cañaveral usa el motor de VTEX. Limitamos de 0 a 9 para traer solo 10 productos.
-      final url = Uri.parse(
-          'https://www.supertiendascanaveral.com.co/api/catalog_system/pub/products/search/$queryEncoded?O=$orden&_from=0&_to=9'
-      );
-
-      final response = await http.get(
-        url,
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        },
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 206) {
-        final List<dynamic> data = jsonDecode(response.body);
-        List<dynamic> resultados = [];
-
-        for (var item in data) {
-          try {
-            final firstItem = item['items'][0];
-            final seller = firstItem['sellers'][0];
-            final offer = seller['commertialOffer'];
-
-            double precio = (offer['Price'] as num).toDouble();
-
-            if (precio > 0) {
-              resultados.add({
-                'nombre': item['productName'] ?? 'Producto Cañaveral',
-                'precio': precio,
-                'tienda': 'Cañaveral',
-                'imagen': firstItem['images'][0]['imageUrl'] ?? '',
-                'link': item['link'] ?? 'https://www.supertiendascanaveral.com',
-                'marca': item['brand'] ?? 'Cañaveral',
-              });
-            }
-          } catch (e) { continue; }
-        }
-        debugPrint("EcoMerca2 -> Cañaveral encontró: ${resultados.length}");
-        return resultados;
-      }
-    } catch (e) {
-      debugPrint("Error en Cañaveral: $e");
     }
     return [];
   }
