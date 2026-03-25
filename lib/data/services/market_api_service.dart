@@ -5,37 +5,49 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
 
 class MarketApiService {
-  static Future<List<dynamic>> buscarEnTiendas(String query, {String orden = 'OrderByScoreDESC'}) async {
+  static Future<List<dynamic>> buscarEnTiendas(
+    String query, {
+    String orden = 'OrderByScoreDESC',
+  }) async {
     List<dynamic> todosLosResultados = [];
 
     try {
       final resultados = await Future.wait([
         _buscarEnExito(query, orden: orden),
-        _buscarEnOlimpica(query),
-        _buscarEnSurtifamiliar(query),
+        _buscarEnOlimpica(query, orden: orden),
+        _buscarEnSurtifamiliar(query, orden: orden),
       ]);
 
       for (var lista in resultados) {
         todosLosResultados.addAll(lista);
       }
 
+      todosLosResultados.removeWhere((p) => p['precio'] == null || (p['precio'] as num) <= 0);
       todosLosResultados.sort((a, b) => a['precio'].compareTo(b['precio']));
-
     } catch (e) {
       debugPrint("Error en MarketApiService: $e");
     }
     return todosLosResultados;
   }
 
-  static Future<List<dynamic>> _buscarEnExito(String query, {String orden = 'OrderByScoreDESC'}) async {
+  static Future<List<dynamic>> _buscarEnExito(
+    String query, {
+    String orden = 'OrderByScoreDESC',
+  }) async {
     try {
       final String queryEncoded = Uri.encodeComponent(query);
-      final url = Uri.parse('https://www.exito.com/api/catalog_system/pub/products/search?ft=$queryEncoded&O=$orden&_from=0&_to=9');
+      final url = Uri.parse(
+        'https://www.exito.com/api/catalog_system/pub/products/search?ft=$queryEncoded&O=$orden&_from=0&_to=9',
+      );
 
-      final response = await http.get(url, headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      });
+      final response = await http.get(
+        url,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+      );
 
       debugPrint("Status Éxito: ${response.statusCode}");
 
@@ -46,23 +58,26 @@ class MarketApiService {
         if (data.isEmpty) return [];
 
         // Usamos map y convertimos a lista, filtrando nulos
-        return data.map((product) {
-          try {
-            final item = product['items'][0];
-            final seller = item['sellers'][0];
-            final offer = seller['commertialOffer'];
+        return data
+            .map((product) {
+              try {
+                final item = product['items'][0];
+                final seller = item['sellers'][0];
+                final offer = seller['commertialOffer'];
 
-            return {
-              'nombre': product['productName'] ?? 'Sin nombre',
-              'precio': (offer['Price'] as num).toDouble(),
-              'tienda': 'Éxito',
-              'imagen': item['images'][0]['imageUrl'] ?? '',
-              'link': 'https://www.exito.com/${product['linkText']}/p',
-            };
-          } catch (e) {
-            return null;
-          }
-        }).where((element) => element != null).toList();
+                return {
+                  'nombre': product['productName'] ?? 'Sin nombre',
+                  'precio': (offer['Price'] as num).toDouble(),
+                  'tienda': 'Éxito',
+                  'imagen': item['images'][0]['imageUrl'] ?? '',
+                  'link': 'https://www.exito.com/${product['linkText']}/p',
+                };
+              } catch (e) {
+                return null;
+              }
+            })
+            .where((element) => element != null)
+            .toList();
       }
     } catch (e) {
       debugPrint("Error en el método _buscarEnExito: $e");
@@ -70,12 +85,15 @@ class MarketApiService {
     return [];
   }
 
-  static Future<List<dynamic>> _buscarEnOlimpica(String query, {String orden = 'OrderByScoreDESC'}) async {
+  static Future<List<dynamic>> _buscarEnOlimpica(
+    String query, {
+    String orden = 'OrderByScoreDESC',
+  }) async {
     try {
       final String queryEncoded = Uri.encodeComponent(query);
 
       final url = Uri.parse(
-          'https://www.olimpica.com/api/catalog_system/pub/products/search/$queryEncoded?O=$orden&_from=0&_to=9'
+        'https://www.olimpica.com/api/catalog_system/pub/products/search/$queryEncoded?O=$orden&_from=0&_to=9',
       );
 
       final response = await http.get(
@@ -83,7 +101,8 @@ class MarketApiService {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         },
       );
 
@@ -108,7 +127,9 @@ class MarketApiService {
                 'link': item['link'] ?? '',
               });
             }
-          } catch (e) { continue; }
+          } catch (e) {
+            continue;
+          }
         }
         return resultados;
       }
@@ -118,9 +139,14 @@ class MarketApiService {
     return [];
   }
 
-  static Future<List<dynamic>> _buscarEnSurtifamiliar(String query, {String orden = 'OrderByScoreDESC'}) async {
+  static Future<List<dynamic>> _buscarEnSurtifamiliar(
+    String query, {
+    String orden = 'OrderByScoreDESC',
+  }) async {
     try {
-      final url = Uri.parse('https://ecommerce.surtifamiliar.com/backend/admin/frontend/web/index.php/categoria-info/show-items-by-cattegory');
+      final url = Uri.parse(
+        'https://ecommerce.surtifamiliar.com/backend/admin/frontend/web/index.php/categoria-info/show-items-by-cattegory',
+      );
 
       String surtiSort = "1";
       if (orden == 'OrderByPriceASC') {
@@ -136,7 +162,8 @@ class MarketApiService {
           'Accept': 'application/json, text/plain, */*',
           'Origin': 'https://www.surtifamiliar.com',
           'Referer': 'https://www.surtifamiliar.com/',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
         },
         body: jsonEncode({
           "id": null,
@@ -152,9 +179,9 @@ class MarketApiService {
             "attributes": [],
             "productHighPrice": 0,
             "productLowPrice": 0,
-            "sort": surtiSort
+            "sort": surtiSort,
           },
-          "typeProducts": null
+          "typeProducts": null,
         }),
       );
 
@@ -162,7 +189,8 @@ class MarketApiService {
         final data = jsonDecode(response.body);
         final List<dynamic> items = data['items'] ?? [];
         List<dynamic> resultados = [];
-        const String baseImgUrl = "https://ecommerce.surtifamiliar.com/backend/admin/backend/web/archivosDelCliente/items/images/";
+        const String baseImgUrl =
+            "https://ecommerce.surtifamiliar.com/backend/admin/backend/web/archivosDelCliente/items/images/";
 
         for (var item in items) {
           double precio = (item['currentPrice'] as num?)?.toDouble() ?? 0.0;
@@ -177,7 +205,9 @@ class MarketApiService {
             });
           }
         }
-        debugPrint("EcoMerca2 -> Surtifamiliar ($surtiSort): ${resultados.length} items.");
+        debugPrint(
+          "EcoMerca2 -> Surtifamiliar ($surtiSort): ${resultados.length} items.",
+        );
         return resultados;
       }
     } catch (e) {
@@ -185,5 +215,4 @@ class MarketApiService {
     }
     return [];
   }
-
 }

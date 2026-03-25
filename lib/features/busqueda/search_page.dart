@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ecomerk2/data/services/market_api_service.dart';
+import 'package:ecomerk2/data/services/user_api_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SearchPage extends StatefulWidget {
@@ -14,9 +15,31 @@ class _SearchPageState extends State<SearchPage> {
   List<dynamic> _resultadosFiltrados = [];
   bool _cargando = false;
   String _ordenSeleccionado = 'OrderByScoreDESC';
-  String? _tiendaSeleccionada;
+  Set<String> _tiendasSeleccionadas = {};
+  Set<String> _enFavoritos = {};
 
-  Future<void> _ejecutarBusqueda() async {
+  @override
+  void initState() {
+    super.initState();
+    _cargarFavoritosPreviamenteGuardados();
+  }
+
+  Future<void> _cargarFavoritosPreviamenteGuardados() async {
+    try {
+      final id = await ApiService.obtenerUserId();
+      if (id != null) {
+        final usuario = await ApiService.obtenerUsuario(id);
+        if (usuario != null && mounted) {
+          final favs = List<dynamic>.from(usuario['favoritos'] ?? usuario['alimentosFavoritos'] ?? []);
+          setState(() {
+            _enFavoritos = favs.map((f) => (f is Map ? (f['link'] ?? f['nombre']).toString() : f.toString())).toSet();
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _ejecutarBusqueda({bool nuevaBusqueda = true}) async {
     final texto = _controller.text.trim();
     if (texto.isEmpty) return;
 
@@ -24,7 +47,9 @@ class _SearchPageState extends State<SearchPage> {
       _cargando = true;
       _todosResultados = [];
       _resultadosFiltrados = [];
-      _tiendaSeleccionada = null;
+      if (nuevaBusqueda) {
+        _tiendasSeleccionadas.clear();
+      }
     });
 
     try {
@@ -51,14 +76,10 @@ class _SearchPageState extends State<SearchPage> {
   void _aplicarFiltros() {
     List<dynamic> resultado = List.from(_todosResultados);
 
-    if (_tiendaSeleccionada != null) {
+    if (_tiendasSeleccionadas.isNotEmpty) {
       resultado = resultado
-          .where((p) => p['tienda'] == _tiendaSeleccionada)
+          .where((p) => _tiendasSeleccionadas.contains(p['tienda']))
           .toList();
-    }
-
-    if (_ordenSeleccionado == 'OrderByPriceASC') {
-      resultado.sort((a, b) => a['precio'].compareTo(b['precio']));
     }
 
     setState(() => _resultadosFiltrados = resultado);
@@ -73,19 +94,119 @@ class _SearchPageState extends State<SearchPage> {
 
   String _calcularAhorro(double precio) {
     if (_todosResultados.isEmpty) return '';
-    final maxPrecio = _todosResultados
+
+    double sumaPrecios = _todosResultados
         .map((p) => p['precio'] as double)
-        .reduce((a, b) => a > b ? a : b);
-    if (maxPrecio == precio) return '';
-    final ahorro = maxPrecio - precio;
+        .reduce((a, b) => a + b);
+
+    double promedio = sumaPrecios / _todosResultados.length;
+
+    if (precio >= promedio) return '';
+
+    final ahorro = promedio - precio;
+
     return 'Ahorras \$${_formatearPrecio(ahorro)}';
   }
-
   List<String> get _tiendas {
     return _todosResultados
         .map((p) => p['tienda'] as String)
         .toSet()
         .toList();
+  }
+
+  Future<void> _toggleFavorito(Map<String, dynamic> item) async {
+    try {
+      final id = await ApiService.obtenerUserId();
+      if (id == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Debes iniciar sesión para editar favoritos')),
+          );
+        }
+        return;
+      }
+      
+      final usuario = await ApiService.obtenerUsuario(id);
+      if (usuario == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Error al obtener usuario')),
+          );
+        }
+        return;
+      }
+
+      List<dynamic> favoritosActuales = List.from(usuario['favoritos'] ?? usuario['alimentosFavoritos'] ?? []);
+      
+      final itemLink = item['link'];
+      final itemNombre = item['nombre'];
+
+      // Verificar si ya existe buscando por el link o nombre
+      int indexExiste = favoritosActuales.indexWhere((favorito) {
+        if (favorito is Map) {
+          return favorito['link'] == itemLink || favorito['nombre'] == itemNombre;
+        }
+        return favorito == itemNombre;
+      });
+
+      if (indexExiste != -1) {
+        // Quitar de favoritos
+        favoritosActuales.removeAt(indexExiste);
+        final exito = await ApiService.actualizarLista(id, favoritosActuales);
+        
+        if (mounted) {
+          if (exito) {
+            setState(() {
+              _enFavoritos.remove(itemLink?.toString() ?? '');
+              _enFavoritos.remove(itemNombre?.toString() ?? '');
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Producto quitado de favoritos')),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Error al quitar de favoritos')),
+            );
+          }
+        }
+      } else {
+        // Agregar a favoritos
+        final productoFavorito = {
+          "nombre": itemNombre,
+          "precio": "\$${_formatearPrecio(item['precio'] as double)}",
+          "tienda": item['tienda'],
+          "imagen": item['imagen'],
+          "link": itemLink
+        };
+        
+        favoritosActuales.add(productoFavorito);
+        final exito = await ApiService.actualizarLista(id, favoritosActuales);
+        
+        if (mounted) {
+          if (exito) {
+            setState(() {
+              _enFavoritos.add(itemLink?.toString() ?? itemNombre?.toString() ?? '');
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Producto agregado a favoritos'),
+                backgroundColor: Color(0xFF1D9E75),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Error al agregar a favoritos')),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al modificar favoritos')),
+        );
+      }
+    }
   }
 
   @override
@@ -123,12 +244,12 @@ class _SearchPageState extends State<SearchPage> {
                                 color: Color(0xFF1D9E75), width: 2),
                           ),
                         ),
-                        onSubmitted: (_) => _ejecutarBusqueda(),
+                        onSubmitted: (_) => _ejecutarBusqueda(nuevaBusqueda: true),
                       ),
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton(
-                      onPressed: _cargando ? null : _ejecutarBusqueda,
+                      onPressed: _cargando ? null : () => _ejecutarBusqueda(nuevaBusqueda: true),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF1D9E75),
                         shape: RoundedRectangleBorder(
@@ -159,14 +280,17 @@ class _SearchPageState extends State<SearchPage> {
                               padding: const EdgeInsets.only(right: 8),
                               child: FilterChip(
                                 label: Text(tienda),
-                                selected: _tiendaSeleccionada == tienda,
+                                selected: _tiendasSeleccionadas.contains(tienda),
                                 selectedColor:
                                     const Color(0xFF1D9E75).withOpacity(0.2),
                                 checkmarkColor: const Color(0xFF1D9E75),
                                 onSelected: (selected) {
                                   setState(() {
-                                    _tiendaSeleccionada =
-                                        selected ? tienda : null;
+                                    if (selected) {
+                                      _tiendasSeleccionadas.add(tienda);
+                                    } else {
+                                      _tiendasSeleccionadas.remove(tienda);
+                                    }
                                   });
                                   _aplicarFiltros();
                                 },
@@ -267,6 +391,7 @@ class _SearchPageState extends State<SearchPage> {
                   final item = _resultadosFiltrados[index];
                   final ahorro = _calcularAhorro(item['precio'] as double);
                   final esMasBarato = ahorro.isNotEmpty;
+                  final esFavorito = _enFavoritos.contains(item['link']) || _enFavoritos.contains(item['nombre']);
 
                   return GestureDetector(
                     onTap: () async {
@@ -435,15 +560,27 @@ class _SearchPageState extends State<SearchPage> {
                                       const SizedBox(height: 4),
                                       // Ver en tienda
                                       Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
-                                          const Icon(Icons.open_in_new,
-                                              size: 12, color: Colors.grey),
-                                          const SizedBox(width: 4),
-                                          const Text(
-                                            'Ver en tienda',
-                                            style: TextStyle(
-                                                color: Colors.grey,
-                                                fontSize: 11),
+                                          Row(
+                                            children: [
+                                              const Icon(Icons.open_in_new,
+                                                  size: 12, color: Colors.grey),
+                                              const SizedBox(width: 4),
+                                              const Text(
+                                                'Ver en tienda',
+                                                style: TextStyle(
+                                                    color: Colors.grey,
+                                                    fontSize: 11),
+                                              ),
+                                            ],
+                                          ),
+                                          IconButton(
+                                            icon: Icon(esFavorito ? Icons.favorite : Icons.favorite_border,
+                                                color: const Color(0xFF1D9E75), size: 20),
+                                            onPressed: () => _toggleFavorito(item as Map<String, dynamic>),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
                                           ),
                                         ],
                                       ),
@@ -472,8 +609,12 @@ class _SearchPageState extends State<SearchPage> {
       selectedColor: const Color(0xFF1D9E75).withOpacity(0.2),
       checkmarkColor: const Color(0xFF1D9E75),
       onSelected: (selected) {
-        setState(() => _ordenSeleccionado = valor);
-        if (_todosResultados.isNotEmpty) _aplicarFiltros();
+        if (_ordenSeleccionado != valor) {
+          setState(() => _ordenSeleccionado = valor);
+          if (_controller.text.trim().isNotEmpty) {
+            _ejecutarBusqueda(nuevaBusqueda: false);
+          }
+        }
       },
     );
   }

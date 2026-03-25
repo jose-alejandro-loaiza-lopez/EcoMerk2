@@ -10,7 +10,10 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('jwt_token', token);
     // Guardar timestamp de cuando se guardó el token
-    await prefs.setInt('token_timestamp', DateTime.now().millisecondsSinceEpoch);
+    await prefs.setInt(
+      'token_timestamp',
+      DateTime.now().millisecondsSinceEpoch,
+    );
   }
 
   static Future<String?> obtenerToken() async {
@@ -67,7 +70,10 @@ class ApiService {
         return {'exito': true, 'mensaje': 'Cuenta creada exitosamente'};
       } else {
         final body = jsonDecode(response.body);
-        return {'exito': false, 'mensaje': body['mensaje'] ?? 'Error al registrarse'};
+        return {
+          'exito': false,
+          'mensaje': body['mensaje'] ?? 'Error al registrarse',
+        };
       }
     } catch (e) {
       return {'exito': false, 'mensaje': 'No se pudo conectar al servidor'};
@@ -124,7 +130,7 @@ class ApiService {
   }
 
   // ACTUALIZAR LISTA DE FAVORITOS
-  static Future<bool> actualizarLista(int id, List<String> lista) async {
+  static Future<bool> actualizarLista(int id, List<dynamic> lista) async {
     try {
       final token = await obtenerToken();
       final response = await http.patch(

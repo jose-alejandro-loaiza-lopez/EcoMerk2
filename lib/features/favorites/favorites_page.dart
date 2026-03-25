@@ -10,8 +10,7 @@ class FavoritesPage extends StatefulWidget {
 }
 
 class _FavoritesPageState extends State<FavoritesPage> {
-  final _productoController = TextEditingController();
-  List<String> _lista = [];
+  List<dynamic> _lista = [];
   bool _loading = true;
   int? _userId;
 
@@ -33,28 +32,21 @@ class _FavoritesPageState extends State<FavoritesPage> {
       if (usuario != null && mounted) {
         setState(() {
           _userId = id;
-          _lista = List<String>.from(usuario['alimentosFavoritos'] ?? []);
+          _lista = List<dynamic>.from(
+            usuario['favoritos'] ?? usuario['alimentosFavoritos'] ?? [],
+          );
           _loading = false;
         });
       }
     }
   }
 
-  Future<void> _agregarProducto() async {
-    final nombre = _productoController.text.trim();
-    if (nombre.isEmpty) return;
-
-    final nuevaLista = [..._lista, nombre];
-    setState(() => _lista = nuevaLista);
-    _productoController.clear();
-
-    if (_userId != null) {
-      await ApiService.actualizarLista(_userId!, nuevaLista);
-    }
-  }
-
   Future<void> _eliminarProducto(int index) async {
-    final nombre = _lista[index];
+    final item = _lista[index];
+    final nombre = item is Map
+        ? (item['nombre'] ?? 'Producto')
+        : item.toString();
+
     final nuevaLista = [..._lista];
     nuevaLista.removeAt(index);
     setState(() {
@@ -80,11 +72,21 @@ class _FavoritesPageState extends State<FavoritesPage> {
     try {
       final resultados = await MarketApiService.buscarEnTiendas(
         producto,
-        orden: 'OrderByPriceASC',
       );
       if (mounted) {
+        final Set<String> tiendasVistas = {};
+        final List<dynamic> masBaratosPorTienda = [];
+
+        for (final r in resultados) {
+          final String tienda = (r['tienda'] ?? '').toString().toLowerCase();
+          if (!tiendasVistas.contains(tienda)) {
+            tiendasVistas.add(tienda);
+            masBaratosPorTienda.add(r);
+          }
+        }
+
         setState(() {
-          _preciosPorProducto[producto] = resultados.take(4).toList();
+          _preciosPorProducto[producto] = masBaratosPorTienda.take(4).toList();
           _buscandoPrecio[producto] = false;
         });
       }
@@ -102,14 +104,19 @@ class _FavoritesPageState extends State<FavoritesPage> {
     return precio
         .toStringAsFixed(0)
         .replaceAllMapped(
-            RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.');
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]}.',
+        );
   }
 
   // Busca todos los productos de la lista de una vez
   Future<void> _compararTodos() async {
-    for (final producto in _lista) {
-      if (_preciosPorProducto[producto] == null) {
-        await _compararPrecios(producto);
+    for (final item in _lista) {
+      final nombre = item is Map
+          ? (item['nombre'] ?? 'Producto')
+          : item.toString();
+      if (_preciosPorProducto[nombre] == null) {
+        await _compararPrecios(nombre);
       }
     }
   }
@@ -119,96 +126,74 @@ class _FavoritesPageState extends State<FavoritesPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
-        title: const Text('Mi lista de compras',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        title: const Text(
+          'Mi lista de compras',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
         backgroundColor: const Color(0xFF1D9E75),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           if (_lista.isNotEmpty)
             TextButton.icon(
               onPressed: _compararTodos,
-              icon: const Icon(Icons.compare_arrows, color: Colors.white, size: 18),
-              label: const Text('Comparar todo',
-                  style: TextStyle(color: Colors.white, fontSize: 12)),
+              icon: const Icon(
+                Icons.compare_arrows,
+                color: Colors.white,
+                size: 18,
+              ),
+              label: const Text(
+                'Comparar todo',
+                style: TextStyle(color: Colors.white, fontSize: 12),
+              ),
             ),
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF1D9E75)))
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFF1D9E75)),
+            )
           : Column(
               children: [
                 // Resumen si hay items
                 if (_lista.isNotEmpty)
                   Container(
                     width: double.infinity,
-                    margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF1D9E75).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                          color: const Color(0xFF1D9E75).withOpacity(0.3)),
+                        color: const Color(0xFF1D9E75).withOpacity(0.3),
+                      ),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.shopping_basket_outlined,
-                            color: Color(0xFF1D9E75), size: 20),
+                        const Icon(
+                          Icons.shopping_basket_outlined,
+                          color: Color(0xFF1D9E75),
+                          size: 20,
+                        ),
                         const SizedBox(width: 8),
                         Text(
                           '${_lista.length} producto${_lista.length != 1 ? 's' : ''} en tu lista',
                           style: const TextStyle(
-                              color: Color(0xFF1D9E75),
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14),
+                            color: Color(0xFF1D9E75),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
                         ),
                         const Spacer(),
-                        const Text('Desliza para eliminar',
-                            style: TextStyle(color: Colors.grey, fontSize: 11)),
+                        const Text(
+                          'Desliza para eliminar',
+                          style: TextStyle(color: Colors.grey, fontSize: 11),
+                        ),
                       ],
                     ),
                   ),
-
-                // Campo para agregar
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  color: Colors.transparent,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _productoController,
-                          decoration: InputDecoration(
-                            hintText: 'Agregar producto a tu lista...',
-                            prefixIcon: const Icon(Icons.add_shopping_cart,
-                                color: Color(0xFF1D9E75)),
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none),
-                            filled: true,
-                            fillColor: Colors.white,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 14),
-                          ),
-                          onSubmitted: (_) => _agregarProducto(),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: _agregarProducto,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1D9E75),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 15),
-                          elevation: 0,
-                        ),
-                        child: const Icon(Icons.add, color: Colors.white),
-                      ),
-                    ],
-                  ),
-                ),
-
                 // Lista
                 Expanded(
                   child: _lista.isEmpty
@@ -218,15 +203,23 @@ class _FavoritesPageState extends State<FavoritesPage> {
                             children: const [
                               Text('🛒', style: TextStyle(fontSize: 64)),
                               SizedBox(height: 16),
-                              Text('Tu lista está vacía',
-                                  style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF444441))),
+                              Text(
+                                'Tu lista está vacía',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF444441),
+                                ),
+                              ),
                               SizedBox(height: 8),
-                              Text('Agrega productos arriba para\ncomparar precios entre tiendas',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(color: Colors.grey, fontSize: 14)),
+                              Text(
+                                'Agrega productos desde la sección de búsqueda\npara tenerlos aquí',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 14,
+                                ),
+                              ),
                             ],
                           ),
                         )
@@ -234,13 +227,21 @@ class _FavoritesPageState extends State<FavoritesPage> {
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                           itemCount: _lista.length,
                           itemBuilder: (context, index) {
-                            final producto = _lista[index];
-                            final precios = _preciosPorProducto[producto];
-                            final buscando = _buscandoPrecio[producto] == true;
-                            final expandido = _expandidos.contains(producto);
+                            final item = _lista[index];
+                            final isMap = item is Map;
+                            final nombreProducto = isMap
+                                ? (item['nombre'] ?? 'Producto')
+                                : item.toString();
+
+                            final precios = _preciosPorProducto[nombreProducto];
+                            final buscando =
+                                _buscandoPrecio[nombreProducto] == true;
+                            final expandido = _expandidos.contains(
+                              nombreProducto,
+                            );
 
                             return Dismissible(
-                              key: Key('$index-$producto'),
+                              key: Key('$index-$nombreProducto'),
                               direction: DismissDirection.endToStart,
                               background: Container(
                                 alignment: Alignment.centerRight,
@@ -254,47 +255,65 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                   children: [
                                     Icon(Icons.delete, color: Colors.white),
                                     SizedBox(height: 4),
-                                    Text('Eliminar',
-                                        style: TextStyle(
-                                            color: Colors.white, fontSize: 11)),
+                                    Text(
+                                      'Eliminar',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
                               onDismissed: (_) => _eliminarProducto(index),
-                              child: Container(
-                                margin: const EdgeInsets.only(bottom: 12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(16),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.05),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 2),
-                                    )
-                                  ],
-                                ),
-                                child: Column(
+                              child: GestureDetector(
+                                onTap: () async {
+                                  if (isMap && item['link'] != null && item['link'].toString().isNotEmpty) {
+                                    final url = Uri.parse(item['link'].toString());
+                                    try {
+                                      await launchUrl(url, mode: LaunchMode.externalApplication);
+                                    } catch (_) {}
+                                  }
+                                },
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.05),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Column(
                                   children: [
                                     // Fila principal del producto
                                     Padding(
                                       padding: const EdgeInsets.all(14),
                                       child: Row(
                                         children: [
-                                          Container(
-                                            width: 42,
-                                            height: 42,
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFF1D9E75)
-                                                  .withOpacity(0.1),
+                                          if (isMap &&
+                                              (item['imagen']
+                                                      ?.toString()
+                                                      .isNotEmpty ??
+                                                  false))
+                                            ClipRRect(
                                               borderRadius:
                                                   BorderRadius.circular(10),
-                                            ),
-                                            child: const Icon(
-                                                Icons.shopping_cart_outlined,
-                                                color: Color(0xFF1D9E75),
-                                                size: 20),
-                                          ),
+                                              child: Image.network(
+                                                item['imagen'],
+                                                width: 42,
+                                                height: 42,
+                                                fit: BoxFit.contain,
+                                                errorBuilder: (_, __, ___) =>
+                                                    _buildIconPlaceholder(),
+                                              ),
+                                            )
+                                          else
+                                            _buildIconPlaceholder(),
                                           const SizedBox(width: 12),
                                           Expanded(
                                             child: Column(
@@ -302,21 +321,38 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                                   CrossAxisAlignment.start,
                                               children: [
                                                 Text(
-                                                  producto,
+                                                  nombreProducto,
                                                   style: const TextStyle(
-                                                      fontSize: 15,
-                                                      fontWeight: FontWeight.w600,
-                                                      color: Color(0xFF2C2C2A)),
+                                                    fontSize: 15,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Color(0xFF2C2C2A),
+                                                  ),
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                 ),
+                                                if (isMap &&
+                                                    item['precio'] != null &&
+                                                    item['precio'] != "\$0")
+                                                  Text(
+                                                    'Guardado a: ${item['precio']} · ${item['tienda'] ?? ''}',
+                                                    style: const TextStyle(
+                                                      color: Colors.grey,
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
+                                                  ),
                                                 if (precios != null &&
                                                     precios.isNotEmpty)
                                                   Text(
-                                                    'Desde \$${_formatearPrecio(precios[0]['precio'] as double)} · ${precios[0]['tienda']}',
+                                                    '${isMap && item['precio'] != null && item['precio'] != "\$0" ? "Mejor opción" : "Desde"}: \$${_formatearPrecio(precios[0]['precio'] as double)} · ${precios[0]['tienda']}',
                                                     style: const TextStyle(
-                                                        color: Color(0xFF1D9E75),
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.w500),
+                                                      color: Color(0xFF1D9E75),
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
                                                   ),
                                               ],
                                             ),
@@ -328,50 +364,69 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                               onTap: () => precios != null
                                                   ? setState(() {
                                                       if (expandido) {
-                                                        _expandidos.remove(producto);
+                                                        _expandidos.remove(
+                                                          nombreProducto,
+                                                        );
                                                       } else {
-                                                        _expandidos.add(producto);
+                                                        _expandidos.add(
+                                                          nombreProducto,
+                                                        );
                                                       }
                                                     })
-                                                  : _compararPrecios(producto),
+                                                  : _compararPrecios(
+                                                      nombreProducto,
+                                                    ),
                                               child: Container(
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                        horizontal: 10,
-                                                        vertical: 6),
+                                                      horizontal: 10,
+                                                      vertical: 6,
+                                                    ),
                                                 decoration: BoxDecoration(
                                                   color: precios != null
-                                                      ? const Color(0xFF1D9E75)
-                                                          .withOpacity(0.1)
+                                                      ? const Color(
+                                                          0xFF1D9E75,
+                                                        ).withOpacity(0.1)
                                                       : const Color(0xFF1D9E75),
                                                   borderRadius:
                                                       BorderRadius.circular(8),
                                                 ),
                                                 child: Row(
-                                                  mainAxisSize: MainAxisSize.min,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
                                                   children: [
                                                     Icon(
                                                       precios != null
                                                           ? (expandido
-                                                              ? Icons.keyboard_arrow_up
-                                                              : Icons.keyboard_arrow_down)
-                                                          : Icons.compare_arrows,
+                                                                ? Icons
+                                                                      .keyboard_arrow_up
+                                                                : Icons
+                                                                      .keyboard_arrow_down)
+                                                          : Icons
+                                                                .compare_arrows,
                                                       color: precios != null
-                                                          ? const Color(0xFF1D9E75)
+                                                          ? const Color(
+                                                              0xFF1D9E75,
+                                                            )
                                                           : Colors.white,
                                                       size: 16,
                                                     ),
                                                     const SizedBox(width: 4),
                                                     Text(
                                                       precios != null
-                                                          ? (expandido ? 'Ocultar' : 'Ver precios')
+                                                          ? (expandido
+                                                                ? 'Ocultar'
+                                                                : 'Ver precios')
                                                           : 'Comparar',
                                                       style: TextStyle(
                                                         color: precios != null
-                                                            ? const Color(0xFF1D9E75)
+                                                            ? const Color(
+                                                                0xFF1D9E75,
+                                                              )
                                                             : Colors.white,
                                                         fontSize: 11,
-                                                        fontWeight: FontWeight.w600,
+                                                        fontWeight:
+                                                            FontWeight.w600,
                                                       ),
                                                     ),
                                                   ],
@@ -385,38 +440,33 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                                 child: SizedBox(
                                                   width: 20,
                                                   height: 20,
-                                                  child: CircularProgressIndicator(
-                                                    color: Color(0xFF1D9E75),
-                                                    strokeWidth: 2,
-                                                  ),
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        color: Color(
+                                                          0xFF1D9E75,
+                                                        ),
+                                                        strokeWidth: 2,
+                                                      ),
                                                 ),
                                               ),
                                             ),
-                                          const SizedBox(width: 8),
-                                          IconButton(
-                                            icon: const Icon(
-                                                Icons.delete_outline,
-                                                color: Colors.red,
-                                                size: 20),
-                                            onPressed: () =>
-                                                _eliminarProducto(index),
-                                            padding: EdgeInsets.zero,
-                                            constraints: const BoxConstraints(),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
 
                                     // Panel de comparación expandible
                                     if (expandido && precios != null)
                                       Container(
                                         decoration: BoxDecoration(
                                           color: const Color(0xFFF8FFFE),
-                                          borderRadius: const BorderRadius.vertical(
-                                              bottom: Radius.circular(16)),
+                                          borderRadius:
+                                              const BorderRadius.vertical(
+                                                bottom: Radius.circular(16),
+                                              ),
                                           border: Border(
                                             top: BorderSide(
-                                                color: Colors.grey.shade100),
+                                              color: Colors.grey.shade100,
+                                            ),
                                           ),
                                         ),
                                         child: Column(
@@ -424,21 +474,29 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                               CrossAxisAlignment.start,
                                           children: [
                                             Padding(
-                                              padding: const EdgeInsets.fromLTRB(
-                                                  14, 12, 14, 8),
+                                              padding:
+                                                  const EdgeInsets.fromLTRB(
+                                                    14,
+                                                    12,
+                                                    14,
+                                                    8,
+                                                  ),
                                               child: Row(
                                                 children: [
-                                                  const Icon(Icons.storefront,
-                                                      size: 14,
-                                                      color: Colors.grey),
+                                                  const Icon(
+                                                    Icons.storefront,
+                                                    size: 14,
+                                                    color: Colors.grey,
+                                                  ),
                                                   const SizedBox(width: 6),
                                                   Text(
                                                     'Comparación de precios · ${precios.length} resultado${precios.length != 1 ? 's' : ''}',
                                                     style: const TextStyle(
-                                                        color: Colors.grey,
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.w500),
+                                                      color: Colors.grey,
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
                                                   ),
                                                 ],
                                               ),
@@ -447,50 +505,63 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                               const Padding(
                                                 padding: EdgeInsets.all(16),
                                                 child: Text(
-                                                    'No se encontraron precios para este producto',
-                                                    style: TextStyle(
-                                                        color: Colors.grey,
-                                                        fontSize: 13)),
+                                                  'No se encontraron precios para este producto',
+                                                  style: TextStyle(
+                                                    color: Colors.grey,
+                                                    fontSize: 13,
+                                                  ),
+                                                ),
                                               )
                                             else
-                                              ...precios
-                                                  .asMap()
-                                                  .entries
-                                                  .map((entry) {
+                                              ...precios.asMap().entries.map((
+                                                entry,
+                                              ) {
                                                 final i = entry.key;
                                                 final p = entry.value;
                                                 final esMasBarato = i == 0;
                                                 return GestureDetector(
                                                   onTap: () async {
                                                     final url = Uri.parse(
-                                                        p['link'] ?? '');
+                                                      p['link'] ?? '',
+                                                    );
                                                     try {
-                                                      await launchUrl(url,
-                                                          mode: LaunchMode
-                                                              .externalApplication);
+                                                      await launchUrl(
+                                                        url,
+                                                        mode: LaunchMode
+                                                            .externalApplication,
+                                                      );
                                                     } catch (_) {}
                                                   },
                                                   child: Container(
-                                                    margin: const EdgeInsets
-                                                        .fromLTRB(14, 0, 14, 8),
+                                                    margin:
+                                                        const EdgeInsets.fromLTRB(
+                                                          14,
+                                                          0,
+                                                          14,
+                                                          8,
+                                                        ),
                                                     padding:
                                                         const EdgeInsets.all(
-                                                            12),
+                                                          12,
+                                                        ),
                                                     decoration: BoxDecoration(
                                                       color: esMasBarato
                                                           ? const Color(
-                                                                  0xFF1D9E75)
-                                                              .withOpacity(0.08)
+                                                              0xFF1D9E75,
+                                                            ).withOpacity(0.08)
                                                           : Colors.white,
                                                       borderRadius:
                                                           BorderRadius.circular(
-                                                              10),
+                                                            10,
+                                                          ),
                                                       border: Border.all(
                                                         color: esMasBarato
                                                             ? const Color(
-                                                                0xFF1D9E75)
-                                                            : Colors.grey
-                                                                .shade200,
+                                                                0xFF1D9E75,
+                                                              )
+                                                            : Colors
+                                                                  .grey
+                                                                  .shade200,
                                                       ),
                                                     ),
                                                     child: Row(
@@ -498,31 +569,37 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                                         // Imagen del producto
                                                         ClipRRect(
                                                           borderRadius:
-                                                              BorderRadius
-                                                                  .circular(8),
+                                                              BorderRadius.circular(
+                                                                8,
+                                                              ),
                                                           child: Image.network(
                                                             p['imagen'] ?? '',
                                                             width: 48,
                                                             height: 48,
                                                             fit: BoxFit.contain,
-                                                            errorBuilder: (_,
-                                                                    __,
-                                                                    ___) =>
-                                                                Container(
-                                                              width: 48,
-                                                              height: 48,
-                                                              color: Colors
-                                                                  .grey[100],
-                                                              child: const Icon(
-                                                                  Icons
-                                                                      .image_not_supported,
+                                                            errorBuilder:
+                                                                (
+                                                                  _,
+                                                                  __,
+                                                                  ___,
+                                                                ) => Container(
+                                                                  width: 48,
+                                                                  height: 48,
                                                                   color: Colors
-                                                                      .grey,
-                                                                  size: 20),
-                                                            ),
+                                                                      .grey[100],
+                                                                  child: const Icon(
+                                                                    Icons
+                                                                        .image_not_supported,
+                                                                    color: Colors
+                                                                        .grey,
+                                                                    size: 20,
+                                                                  ),
+                                                                ),
                                                           ),
                                                         ),
-                                                        const SizedBox(width: 10),
+                                                        const SizedBox(
+                                                          width: 10,
+                                                        ),
                                                         Expanded(
                                                           child: Column(
                                                             crossAxisAlignment:
@@ -533,41 +610,45 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                                                 p['nombre'] ??
                                                                     '',
                                                                 style: const TextStyle(
-                                                                    fontSize: 12,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w500),
+                                                                  fontSize: 12,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w500,
+                                                                ),
                                                                 maxLines: 1,
                                                                 overflow:
                                                                     TextOverflow
                                                                         .ellipsis,
                                                               ),
                                                               const SizedBox(
-                                                                  height: 2),
+                                                                height: 2,
+                                                              ),
                                                               Row(
                                                                 children: [
                                                                   const Icon(
-                                                                      Icons
-                                                                          .store,
-                                                                      size: 11,
-                                                                      color: Colors
-                                                                          .grey),
+                                                                    Icons.store,
+                                                                    size: 11,
+                                                                    color: Colors
+                                                                        .grey,
+                                                                  ),
                                                                   const SizedBox(
-                                                                      width: 3),
+                                                                    width: 3,
+                                                                  ),
                                                                   Text(
                                                                     p['tienda']
                                                                         .toString()
                                                                         .toUpperCase(),
                                                                     style: TextStyle(
-                                                                        color: Colors
-                                                                            .grey[600],
-                                                                        fontSize:
-                                                                            10,
-                                                                        fontWeight:
-                                                                            FontWeight
-                                                                                .bold,
-                                                                        letterSpacing:
-                                                                            0.5),
+                                                                      color: Colors
+                                                                          .grey[600],
+                                                                      fontSize:
+                                                                          10,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .bold,
+                                                                      letterSpacing:
+                                                                          0.5,
+                                                                    ),
                                                                   ),
                                                                 ],
                                                               ),
@@ -586,62 +667,70 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                                                 fontWeight:
                                                                     FontWeight
                                                                         .w900,
-                                                                color: esMasBarato
+                                                                color:
+                                                                    esMasBarato
                                                                     ? const Color(
-                                                                        0xFF1D9E75)
+                                                                        0xFF1D9E75,
+                                                                      )
                                                                     : const Color(
-                                                                        0xFF2C2C2A),
+                                                                        0xFF2C2C2A,
+                                                                      ),
                                                               ),
                                                             ),
                                                             if (esMasBarato)
                                                               Container(
                                                                 padding:
-                                                                    const EdgeInsets
-                                                                        .symmetric(
-                                                                        horizontal:
-                                                                            6,
-                                                                        vertical:
-                                                                            2),
-                                                                decoration:
-                                                                    BoxDecoration(
+                                                                    const EdgeInsets.symmetric(
+                                                                      horizontal:
+                                                                          6,
+                                                                      vertical:
+                                                                          2,
+                                                                    ),
+                                                                decoration: BoxDecoration(
                                                                   color: const Color(
-                                                                      0xFF1D9E75),
+                                                                    0xFF1D9E75,
+                                                                  ),
                                                                   borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                              4),
+                                                                      BorderRadius.circular(
+                                                                        4,
+                                                                      ),
                                                                 ),
                                                                 child: const Text(
                                                                   '+ barato',
                                                                   style: TextStyle(
-                                                                      color: Colors
-                                                                          .white,
-                                                                      fontSize:
-                                                                          9,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .bold),
+                                                                    color: Colors
+                                                                        .white,
+                                                                    fontSize: 9,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .bold,
+                                                                  ),
                                                                 ),
                                                               ),
                                                             const SizedBox(
-                                                                height: 4),
+                                                              height: 4,
+                                                            ),
                                                             const Row(
                                                               children: [
                                                                 Icon(
-                                                                    Icons
-                                                                        .open_in_new,
-                                                                    size: 10,
-                                                                    color: Colors
-                                                                        .grey),
+                                                                  Icons
+                                                                      .open_in_new,
+                                                                  size: 10,
+                                                                  color: Colors
+                                                                      .grey,
+                                                                ),
                                                                 SizedBox(
-                                                                    width: 2),
+                                                                  width: 2,
+                                                                ),
                                                                 Text(
-                                                                    'Ver',
-                                                                    style: TextStyle(
-                                                                        color: Colors
-                                                                            .grey,
-                                                                        fontSize:
-                                                                            10)),
+                                                                  'Ver',
+                                                                  style: TextStyle(
+                                                                    color: Colors
+                                                                        .grey,
+                                                                    fontSize:
+                                                                        10,
+                                                                  ),
+                                                                ),
                                                               ],
                                                             ),
                                                           ],
@@ -658,12 +747,29 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                   ],
                                 ),
                               ),
+                              ),
                             );
                           },
                         ),
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _buildIconPlaceholder() {
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: const Color(0xFF1D9E75).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: const Icon(
+        Icons.shopping_cart_outlined,
+        color: Color(0xFF1D9E75),
+        size: 20,
+      ),
     );
   }
 }
