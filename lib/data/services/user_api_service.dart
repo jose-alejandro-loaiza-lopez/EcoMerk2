@@ -9,6 +9,11 @@ class ApiService {
   static Future<void> guardarToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('jwt_token', token);
+    // Guardar timestamp de cuando se guardó el token
+    await prefs.setInt(
+      'token_timestamp',
+      DateTime.now().millisecondsSinceEpoch,
+    );
   }
 
   static Future<String?> obtenerToken() async {
@@ -16,10 +21,21 @@ class ApiService {
     return prefs.getString('jwt_token');
   }
 
+  static Future<bool> tokenEstaVigente() async {
+    final prefs = await SharedPreferences.getInstance();
+    final timestamp = prefs.getInt('token_timestamp');
+    if (timestamp == null) return false;
+    final guardadoEn = DateTime.fromMillisecondsSinceEpoch(timestamp);
+    final diferencia = DateTime.now().difference(guardadoEn);
+    // Token válido por 23 horas (1 hora de margen antes de las 24h)
+    return diferencia.inHours < 23;
+  }
+
   static Future<void> borrarToken() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('jwt_token');
     await prefs.remove('usuario_id');
+    await prefs.remove('token_timestamp');
   }
 
   static Future<void> guardarUserId(int id) async {
@@ -56,7 +72,7 @@ class ApiService {
         final body = jsonDecode(response.body);
         return {
           'exito': false,
-          'mensaje': body['mensaje'] ?? 'Error al registrarse'
+          'mensaje': body['mensaje'] ?? 'Error al registrarse',
         };
       }
     } catch (e) {
@@ -64,7 +80,7 @@ class ApiService {
     }
   }
 
-  // LOGIN — el servidor devuelve {"id": X, "token": "...", "mensaje": "..."}
+  // LOGIN
   static Future<Map<String, dynamic>> login({
     required String email,
     required String password,
@@ -73,28 +89,22 @@ class ApiService {
       final response = await http.post(
         Uri.parse('$baseUrl/usuarios/login'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'email': email,
-          'password': password,
-        }),
+        body: jsonEncode({'email': email, 'password': password}),
       );
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         await guardarToken(body['token']);
-        await guardarUserId(body['id']); // el servidor devuelve el id directo
+        await guardarUserId(body['id']);
         return {'exito': true};
       } else {
-        return {
-          'exito': false,
-          'mensaje': 'Correo o contraseña incorrectos'
-        };
+        return {'exito': false, 'mensaje': 'Correo o contraseña incorrectos'};
       }
     } catch (e) {
       return {'exito': false, 'mensaje': 'No se pudo conectar al servidor'};
     }
   }
 
-  // OBTENER USUARIO — el servidor devuelve {"usuario": {...}, "mensaje": "..."}
+  // OBTENER USUARIO — con detección de token expirado
   static Future<Map<String, dynamic>?> obtenerUsuario(int id) async {
     try {
       final token = await obtenerToken();
@@ -107,7 +117,11 @@ class ApiService {
       );
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        return body['usuario']; // extraer el objeto usuario
+        return body['usuario'];
+      }
+      // Token expirado o no autorizado
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        return {'_tokenExpirado': true};
       }
       return null;
     } catch (e) {
@@ -116,7 +130,7 @@ class ApiService {
   }
 
   // ACTUALIZAR LISTA DE FAVORITOS
-  static Future<bool> actualizarLista(int id, List<String> lista) async {
+  static Future<bool> actualizarLista(int id, List<dynamic> lista) async {
     try {
       final token = await obtenerToken();
       final response = await http.patch(
@@ -136,15 +150,11 @@ class ApiService {
   static Future<List<dynamic>?> buscarProductos(String query) async {
     final response = await http.get(
       Uri.parse('$baseUrl/productos?search=$query'),
-      headers: {
-        'Authorization': 'Bearer ${await obtenerToken()}',
-      },
+      headers: {'Authorization': 'Bearer ${await obtenerToken()}'},
     );
-
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
-    } else {
-      return [];
     }
+    return [];
   }
 }
