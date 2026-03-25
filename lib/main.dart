@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
 import 'routes/app_routes.dart';
+import 'package:get/get.dart';
+import 'package:ecomerk2/features/favorites/favorites_controller.dart';
 
 void main() {
+  Get.put(FavoritesController());
   runApp(const MyApp());
 }
 

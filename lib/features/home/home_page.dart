@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
+import 'package:ecomerk2/features/favorites/favorites_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -51,6 +52,15 @@ class _HomePageState extends State<HomePage> {
           onPressed: () {
             Navigator.pushNamed(context, '/search');
           },
+          ),
+          IconButton(
+            icon: const Icon(Icons.favorite, color: Colors.white),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const FavoritesPage()),
+              );
+            },
           ),
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),

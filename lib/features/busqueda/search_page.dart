@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:ecomerk2/data/services/market_api_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:get/get.dart';
+import 'package:ecomerk2/features/favorites/favorites_controller.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -12,6 +14,7 @@ class SearchPage extends StatefulWidget {
 class _SearchPageState extends State<SearchPage> {
   // 1. Agregamos el controlador para el texto
   final TextEditingController _controller = TextEditingController();
+  final FavoritesController favController = Get.put(FavoritesController());
   List<dynamic> resultados = [];
   bool cargando = false;
   String ordenSeleccionado = 'OrderByScoreDESC';
@@ -224,6 +227,24 @@ class _SearchPageState extends State<SearchPage> {
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
+                                   // 🔹 DERECHA: botón favorito
+                                  Obx(() {
+                                    final isFav = favController.isFavorite(item);
+
+                                    return IconButton(
+                                      icon: Icon(
+                                        isFav ? Icons.favorite : Icons.favorite_border,
+                                        color: isFav ? Colors.red : Colors.grey,
+                                      ),
+                                       onPressed: () {
+                                        if (isFav) {
+                                          favController.removeFavorite(item);
+                                          } else {
+                                            favController.addFavorite(item);
+                                          }
+                                        },
+                                      );
+                                    }),
                                 ],
                               ),
                             ],
