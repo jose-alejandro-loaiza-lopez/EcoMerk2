@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/custom_drawer.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -84,6 +85,7 @@ class _ChatPageState extends State<ChatPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F3),
+      drawer: const CustomDrawer(),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1D9E75),
         title: Row(

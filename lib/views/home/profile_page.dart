@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
+import '../../widgets/custom_drawer.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -66,13 +68,14 @@ class _ProfilePageState extends State<ProfilePage>
 
   Future<void> _cerrarSesion() async {
     await ApiService.borrarToken();
-    if (mounted) Navigator.pushReplacementNamed(context, '/login');
+    if (mounted) context.go('/login');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F3),
+      drawer: const CustomDrawer(),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1D9E75),
         title: const Text('Mi Perfil',

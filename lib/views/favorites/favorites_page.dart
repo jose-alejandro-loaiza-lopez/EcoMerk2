@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/custom_drawer.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
 import 'package:ecomerk2/data/services/market_api_service.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -125,6 +126,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
+      drawer: const CustomDrawer(),
       appBar: AppBar(
         title: const Text(
           'Mi lista de compras',
