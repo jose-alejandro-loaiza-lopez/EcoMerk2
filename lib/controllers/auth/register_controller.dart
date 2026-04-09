@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'register_service.dart';
+import '../../data/services/register_service.dart';
 
 class RegisterController {
   final nombreController       = TextEditingController();

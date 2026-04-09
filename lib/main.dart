@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
 import 'routes/app_routes.dart';
-
-void main() {
+import 'themes/app_theme.dart';void main() {
   runApp(const MyApp());
 }
 
@@ -11,14 +11,11 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: 'EcoMerk',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
-      ),
-      routes: AppRoutes.routes,
-      home: const AuthCheck(),
+      theme: AppTheme.defaultTheme,
+      routerConfig: AppRoutes.router,
     );
   }
 }
@@ -42,9 +39,9 @@ class _AuthCheckState extends State<AuthCheck> {
     final userId = await ApiService.obtenerUserId();
 
     if (token != null && userId != null) {
-      if (mounted) Navigator.pushReplacementNamed(context, '/home');
+      if (mounted) context.go('/home');
     } else {
-      if (mounted) Navigator.pushReplacementNamed(context, '/login');
+      if (mounted) context.go('/login');
     }
   }
 

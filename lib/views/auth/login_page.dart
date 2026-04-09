@@ -1,22 +1,21 @@
 import 'package:flutter/material.dart';
-import 'register_controller.dart';
+import 'package:go_router/go_router.dart';
+import '../../controllers/auth/login_controller.dart';
 
-class RegisterPage extends StatefulWidget {
-  const RegisterPage({super.key});
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
   @override
-  State<RegisterPage> createState() => _RegisterPageState();
+  State<LoginPage> createState() => _LoginPageState();
 }
 
-class _RegisterPageState extends State<RegisterPage> {
-  final _controller = RegisterController();
+class _LoginPageState extends State<LoginPage> {
+  final _controller = LoginController();
   bool _loading = false;
   bool _obscurePassword = true;
 
-  Future<void> _handleRegister() async {
-    if (_controller.nombreController.text.isEmpty ||
-        _controller.emailController.text.isEmpty ||
-        _controller.passwordController.text.isEmpty ||
-        _controller.fechaNacController.text.isEmpty) {
+  Future<void> _handleLogin() async {
+    if (_controller.emailController.text.isEmpty ||
+        _controller.passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Completa todos los campos.')),
       );
@@ -24,17 +23,11 @@ class _RegisterPageState extends State<RegisterPage> {
     }
 
     setState(() => _loading = true);
-    final result = await _controller.registrar();
+    final result = await _controller.login();
     setState(() => _loading = false);
 
     if (result['exito']) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('¡Cuenta creada exitosamente!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      Navigator.pushReplacementNamed(context, '/login');
+      context.go('/home');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -42,19 +35,6 @@ class _RegisterPageState extends State<RegisterPage> {
           backgroundColor: Colors.red,
         ),
       );
-    }
-  }
-
-  Future<void> _seleccionarFecha() async {
-    final fecha = await showDatePicker(
-      context: context,
-      initialDate: DateTime(2000),
-      firstDate: DateTime(1950),
-      lastDate: DateTime.now(),
-    );
-    if (fecha != null) {
-      _controller.fechaNacController.text =
-          '${fecha.year}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}';
     }
   }
 
@@ -73,11 +53,9 @@ class _RegisterPageState extends State<RegisterPage> {
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
             children: [
-              const SizedBox(height: 60),
-              // Logo
-              Center(
+              const SizedBox(height: 60),              Center(
                 child: Column(children: [
-                  const Text('🛒', style: TextStyle(fontSize: 48)),
+                   const Text('🛒', style: TextStyle(fontSize: 48)),
                   const SizedBox(height: 8),
                   const Text('EcoMerca2',
                     style: TextStyle(
@@ -86,12 +64,11 @@ class _RegisterPageState extends State<RegisterPage> {
                       color: Color(0xFF0F6E56),
                     )),
                   const SizedBox(height: 4),
-                  const Text('Crea tu cuenta gratis',
+                  const Text('Ahorra inteligente cada semana',
                     style: TextStyle(color: Colors.grey, fontSize: 13)),
                 ]),
               ),
               const SizedBox(height: 40),
-              // Tarjeta
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -104,31 +81,12 @@ class _RegisterPageState extends State<RegisterPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Crear cuenta',
+                    const Text('Iniciar sesión',
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w600,
                       )),
                     const SizedBox(height: 20),
-                    // Nombre
-                    const Text('Nombre completo',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      )),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _controller.nombreController,
-                      decoration: InputDecoration(
-                        hintText: 'Tu nombre',
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                        filled: true,
-                        fillColor: const Color(0xFFFAFAFA),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    // Email
                     const Text('Correo electrónico',
                       style: TextStyle(
                         fontSize: 13,
@@ -147,7 +105,6 @@ class _RegisterPageState extends State<RegisterPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // Contraseña
                     const Text('Contraseña',
                       style: TextStyle(
                         fontSize: 13,
@@ -172,35 +129,12 @@ class _RegisterPageState extends State<RegisterPage> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    // Fecha de nacimiento
-                    const Text('Fecha de nacimiento',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      )),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _controller.fechaNacController,
-                      readOnly: true,
-                      onTap: _seleccionarFecha,
-                      decoration: InputDecoration(
-                        hintText: 'Selecciona tu fecha',
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                        filled: true,
-                        fillColor: const Color(0xFFFAFAFA),
-                        suffixIcon: const Icon(Icons.calendar_today,
-                            color: Color(0xFF1D9E75)),
-                      ),
-                    ),
                     const SizedBox(height: 24),
-                    // Botón
                     SizedBox(
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
-                        onPressed: _loading ? null : _handleRegister,
+                        onPressed: _loading ? null : _handleLogin,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF1D9E75),
                           shape: RoundedRectangleBorder(
@@ -209,7 +143,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         child: _loading
                           ? const CircularProgressIndicator(
                               color: Colors.white)
-                          : const Text('Crear cuenta',
+                          : const Text('Ingresar',
                               style: TextStyle(
                                 fontSize: 16,
                                 color: Colors.white,
@@ -217,17 +151,17 @@ class _RegisterPageState extends State<RegisterPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // Link login
                     Center(
                       child: GestureDetector(
-                        onTap: () => Navigator.pop(context),
+                        onTap: () =>
+                            context.push('/register'),
                         child: RichText(
                           text: const TextSpan(
-                            text: '¿Ya tienes cuenta? ',
+                            text: '¿No tienes cuenta? ',
                             style: TextStyle(color: Colors.grey),
                             children: [
                               TextSpan(
-                                text: 'Inicia sesión',
+                                text: 'Regístrate aquí',
                                 style: TextStyle(
                                   color: Color(0xFF1D9E75),
                                   fontWeight: FontWeight.w600,
