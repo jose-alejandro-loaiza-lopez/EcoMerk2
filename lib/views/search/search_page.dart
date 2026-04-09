@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import '../../widgets/custom_drawer.dart';
 import 'package:ecomerk2/data/services/market_api_service.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SearchPage extends StatefulWidget {
-  const SearchPage({super.key});
+  final String? initialQuery;
+  const SearchPage({super.key, this.initialQuery});
   @override
   State<SearchPage> createState() => _SearchPageState();
 }
@@ -22,6 +24,12 @@ class _SearchPageState extends State<SearchPage> {
   void initState() {
     super.initState();
     _cargarFavoritosPreviamenteGuardados();
+    if (widget.initialQuery != null && widget.initialQuery!.isNotEmpty) {
+      _controller.text = widget.initialQuery!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _ejecutarBusqueda(nuevaBusqueda: true);
+      });
+    }
   }
 
   Future<void> _cargarFavoritosPreviamenteGuardados() async {
@@ -213,6 +221,7 @@ class _SearchPageState extends State<SearchPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
+      drawer: const CustomDrawer(),
       appBar: AppBar(
         title: const Text('Buscar en Tuluá',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),

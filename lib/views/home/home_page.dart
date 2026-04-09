@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
+import '../../widgets/custom_drawer.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -95,12 +97,12 @@ class _HomePageState extends State<HomePage>
         SnackBar(content: Text(mensaje), backgroundColor: Colors.orange),
       );
     }
-    Navigator.pushReplacementNamed(context, '/login');
+    context.go('/login');
   }
 
   Future<void> _cerrarSesion() async {
     await ApiService.borrarToken();
-    if (mounted) Navigator.pushReplacementNamed(context, '/login');
+    if (mounted) context.go('/login');
   }
 
   String _obtenerSaludo() {
@@ -128,7 +130,7 @@ class _HomePageState extends State<HomePage>
 
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F3),
-      bottomNavigationBar: _buildBottomNav(),
+      drawer: const CustomDrawer(),
       body: FadeTransition(
         opacity: _fadeAnim,
         child: SlideTransition(
@@ -158,7 +160,7 @@ class _HomePageState extends State<HomePage>
                           ],
                         ),
                         GestureDetector(
-                          onTap: () => Navigator.pushNamed(context, '/search'),
+                          onTap: () => context.go('/search'),
                           child: const Text('Ver más',
                               style: TextStyle(fontSize: 13, color: Color(0xFF1D9E75))),
                         ),
@@ -169,7 +171,7 @@ class _HomePageState extends State<HomePage>
 
                 SliverToBoxAdapter(
                   child: SizedBox(
-                    height: 130,
+                    height: 160,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -177,8 +179,8 @@ class _HomePageState extends State<HomePage>
                       itemBuilder: (context, index) {
                         final oferta = _ofertas[index];
                         return GestureDetector(
-                          onTap: () => Navigator.pushNamed(context, '/search',
-                              arguments: oferta['query']),
+                          onTap: () => context.go('/search',
+                              extra: oferta['query']),
                           child: Container(
                             width: 180,
                             margin: const EdgeInsets.only(right: 12),
@@ -266,7 +268,7 @@ class _HomePageState extends State<HomePage>
                                 fontWeight: FontWeight.w600,
                                 color: Color(0xFF2C2C2A))),
                         GestureDetector(
-                          onTap: () => Navigator.pushNamed(context, '/search'),
+                          onTap: () => context.go('/search'),
                           child: const Text('Ver todas',
                               style: TextStyle(fontSize: 13, color: Color(0xFF1D9E75))),
                         ),
@@ -285,8 +287,8 @@ class _HomePageState extends State<HomePage>
                       itemBuilder: (context, index) {
                         final cat = _categorias[index];
                         return GestureDetector(
-                          onTap: () => Navigator.pushNamed(context, '/search',
-                              arguments: cat['query']),
+                          onTap: () => context.go('/search',
+                              extra: cat['query']),
                           child: Container(
                             width: 76,
                             margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -355,7 +357,7 @@ class _HomePageState extends State<HomePage>
                           ],
                         ),
                         GestureDetector(
-                          onTap: () => Navigator.pushNamed(context, '/favorites'),
+                          onTap: () => context.go('/favorites'),
                           child: const Text('Ver todos',
                               style: TextStyle(fontSize: 13, color: Color(0xFF1D9E75))),
                         ),
@@ -375,10 +377,8 @@ class _HomePageState extends State<HomePage>
                             final precio = fav['precio']?.toString() ?? '';
                             final imagen = fav['imagen']?.toString() ?? '';
 
-                            return GestureDetector(
-                              onTap: () => Navigator.pushNamed(
-                                  context, '/search',
-                                  arguments: nombre),
+                             return GestureDetector(
+                              onTap: () => context.go('/favorites'),
                               child: Container(
                                 margin: const EdgeInsets.fromLTRB(20, 0, 20, 8),
                                 padding: const EdgeInsets.all(14),
@@ -497,18 +497,29 @@ class _HomePageState extends State<HomePage>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
                 children: [
-                  Text(_obtenerSaludo(),
-                      style: const TextStyle(
-                          color: Color(0xFF9FE1CB), fontSize: 13)),
-                  const SizedBox(height: 2),
-                  Text(_nombre,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600)),
+                  Builder(
+                    builder: (context) => IconButton(
+                      icon: const Icon(Icons.menu, color: Colors.white),
+                      onPressed: () => Scaffold.of(context).openDrawer(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_obtenerSaludo(),
+                          style: const TextStyle(
+                              color: Color(0xFF9FE1CB), fontSize: 13)),
+                      const SizedBox(height: 2),
+                      Text(_nombre,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ),
                 ],
               ),
               Row(
@@ -519,7 +530,7 @@ class _HomePageState extends State<HomePage>
                         color: Color(0xFF9FE1CB), size: 22),
                   ),
                   GestureDetector(
-                    onTap: () => Navigator.pushNamed(context, '/profile'),
+                    onTap: () => context.push('/profile'),
                     child: Container(
                       width: 44,
                       height: 44,
@@ -543,43 +554,42 @@ class _HomePageState extends State<HomePage>
             ],
           ),
           const SizedBox(height: 20),
-          GestureDetector(
-            onTap: () => Navigator.pushNamed(context, '/search'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  )
-                ],
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.search, color: Color(0xFF1D9E75), size: 20),
-                  const SizedBox(width: 10),
-                  Text('Buscar y comparar productos...',
-                      style: TextStyle(color: Colors.grey[400], fontSize: 14)),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE1F5EE),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text('Buscar',
-                        style: TextStyle(
-                            color: Color(0xFF1D9E75),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600)),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                )
+              ],
+            ),
+            child: TextField(
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Buscar y comparar productos...',
+                hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+                prefixIcon: const Icon(Icons.search, color: Color(0xFF1D9E75), size: 20),
+                suffixIcon: Container(
+                  margin: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE1F5EE),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                ],
+                  child: const Text('Buscar',
+                      style: TextStyle(color: Color(0xFF1D9E75), fontSize: 11, fontWeight: FontWeight.w600)),
+                ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
               ),
+              onSubmitted: (value) {
+                if (value.trim().isNotEmpty) {
+                  context.go('/search', extra: value.trim());
+                }
+              },
             ),
           ),
         ],
@@ -591,7 +601,7 @@ class _HomePageState extends State<HomePage>
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: GestureDetector(
-        onTap: () => Navigator.pushNamed(context, '/favorites'),
+        onTap: () => context.go('/favorites'),
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
@@ -640,118 +650,6 @@ class _HomePageState extends State<HomePage>
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildBottomNav() {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Color(0xFFE8E8E8), width: 0.5)),
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildNavItem(Icons.home_rounded, 'Inicio', true, () {}),
-              _buildNavItem(Icons.history_rounded, 'Historial', false,
-                  () => Navigator.pushNamed(context, '/search')),
-              _buildNavItemCenter(),
-              _buildNavItem(Icons.auto_awesome_rounded, 'IA', false,
-                  () => Navigator.pushNamed(context, '/chat')),
-              _buildNavItem(Icons.person_rounded, 'Perfil', false,
-                  () => Navigator.pushNamed(context, '/profile')),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNavItem(
-      IconData icon, String label, bool activo, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: activo
-            ? BoxDecoration(
-                color: const Color(0xFFE1F5EE),
-                borderRadius: BorderRadius.circular(12),
-              )
-            : null,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon,
-                color: activo
-                    ? const Color(0xFF1D9E75)
-                    : const Color(0xFF888780),
-                size: 22),
-            const SizedBox(height: 3),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 10,
-                    fontWeight:
-                        activo ? FontWeight.w600 : FontWeight.w400,
-                    color: activo
-                        ? const Color(0xFF1D9E75)
-                        : const Color(0xFF888780))),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNavItemCenter() {
-    return GestureDetector(
-      onTap: () => Navigator.pushNamed(context, '/favorites'),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1D9E75),
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF1D9E75).withOpacity(0.4),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: const Icon(Icons.shopping_cart_rounded,
-                color: Colors.white, size: 24),
-          ),
-          if (_favoritos.isNotEmpty)
-            Positioned(
-              top: -4,
-              right: -4,
-              child: Container(
-                width: 20,
-                height: 20,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFD4537E),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    _favoritos.length > 9 ? '9+' : '${_favoritos.length}',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }
