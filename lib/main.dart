@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
+import 'package:ecomerk2/data/services/security_manager.dart';
 import 'routes/app_routes.dart';
-import 'themes/app_theme.dart';void main() {
+import 'themes/app_theme.dart';
+
+void main() {
   runApp(const MyApp());
 }
 
@@ -35,6 +38,24 @@ class _AuthCheckState extends State<AuthCheck> {
 
   Future<void> _verificarSesion() async {
     await Future.delayed(const Duration(milliseconds: 500));
+    
+    // Obtener nuevas llaves RSA/AES al iniciar
+    await SecurityManager().refreshKeys();
+
+    // Intentar inicio de sesión automático para obtener token nuevo
+    final credenciales = await ApiService.obtenerCredenciales();
+    if (credenciales != null && credenciales['email'] != null && credenciales['password'] != null) {
+      final loginResult = await ApiService.login(
+        email: credenciales['email']!,
+        password: credenciales['password']!,
+      );
+      if (loginResult['exito'] == true) {
+        if (mounted) context.go('/home');
+        return;
+      }
+    }
+
+    // Fallback: verificar si ya hay token almacenado
     final token = await ApiService.obtenerToken();
     final userId = await ApiService.obtenerUserId();
 

@@ -1,10 +1,15 @@
-import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'security_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   static const String baseUrl =
       'https://usuarios-bd-production.up.railway.app/api/v1';
+
+  static http.Client get _client {
+    return SecurityManager().client ?? http.Client();
+  }
 
   static Future<void> guardarToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
@@ -36,6 +41,8 @@ class ApiService {
     await prefs.remove('jwt_token');
     await prefs.remove('usuario_id');
     await prefs.remove('token_timestamp');
+    await prefs.remove('user_email');
+    await prefs.remove('user_password');
   }
 
   static Future<void> guardarUserId(int id) async {
@@ -48,6 +55,22 @@ class ApiService {
     return prefs.getInt('usuario_id');
   }
 
+  static Future<void> guardarCredenciales(String email, String password) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_email', email);
+    await prefs.setString('user_password', password);
+  }
+
+  static Future<Map<String, String>?> obtenerCredenciales() async {
+    final prefs = await SharedPreferences.getInstance();
+    final email = prefs.getString('user_email');
+    final password = prefs.getString('user_password');
+    if (email != null && password != null) {
+      return {'email': email, 'password': password};
+    }
+    return null;
+  }
+
   // REGISTRO
   static Future<Map<String, dynamic>> registrar({
     required String nombre,
@@ -56,7 +79,7 @@ class ApiService {
     required String fechaNacimiento,
   }) async {
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/usuarios/'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
@@ -86,7 +109,7 @@ class ApiService {
     required String password,
   }) async {
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/usuarios/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email, 'password': password}),
@@ -95,6 +118,7 @@ class ApiService {
         final body = jsonDecode(response.body);
         await guardarToken(body['token']);
         await guardarUserId(body['id']);
+        await guardarCredenciales(email, password);
         return {'exito': true};
       } else {
         return {'exito': false, 'mensaje': 'Correo o contraseña incorrectos'};
@@ -108,7 +132,7 @@ class ApiService {
   static Future<Map<String, dynamic>?> obtenerUsuario(int id) async {
     try {
       final token = await obtenerToken();
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/usuarios/$id'),
         headers: {
           'Authorization': 'Bearer $token',
@@ -133,7 +157,7 @@ class ApiService {
   static Future<bool> actualizarLista(int id, List<dynamic> lista) async {
     try {
       final token = await obtenerToken();
-      final response = await http.patch(
+      final response = await _client.patch(
         Uri.parse('$baseUrl/usuarios/$id/favoritos'),
         headers: {
           'Authorization': 'Bearer $token',
@@ -148,7 +172,7 @@ class ApiService {
   }
 
   static Future<List<dynamic>?> buscarProductos(String query) async {
-    final response = await http.get(
+    final response = await _client.get(
       Uri.parse('$baseUrl/productos?search=$query'),
       headers: {'Authorization': 'Bearer ${await obtenerToken()}'},
     );
