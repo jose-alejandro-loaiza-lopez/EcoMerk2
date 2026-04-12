@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../widgets/custom_drawer.dart';
+import 'package:go_router/go_router.dart';
+import 'package:ecomerk2/data/services/navigation_mode_service.dart';
 import 'package:ecomerk2/data/services/market_api_service.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -38,9 +39,17 @@ class _SearchPageState extends State<SearchPage> {
       if (id != null) {
         final usuario = await ApiService.obtenerUsuario(id);
         if (usuario != null && mounted) {
-          final favs = List<dynamic>.from(usuario['favoritos'] ?? usuario['alimentosFavoritos'] ?? []);
+          final favs = List<dynamic>.from(
+            usuario['favoritos'] ?? usuario['alimentosFavoritos'] ?? [],
+          );
           setState(() {
-            _enFavoritos = favs.map((f) => (f is Map ? (f['link'] ?? f['nombre']).toString() : f.toString())).toSet();
+            _enFavoritos = favs
+                .map(
+                  (f) => (f is Map
+                      ? (f['link'] ?? f['nombre']).toString()
+                      : f.toString()),
+                )
+                .toSet();
           });
         }
       }
@@ -73,7 +82,8 @@ class _SearchPageState extends State<SearchPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Error al conectar con los supermercados')),
+            content: Text('Error al conectar con los supermercados'),
+          ),
         );
       }
     } finally {
@@ -97,7 +107,9 @@ class _SearchPageState extends State<SearchPage> {
     return precio
         .toStringAsFixed(0)
         .replaceAllMapped(
-            RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.');
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]}.',
+        );
   }
 
   String _calcularAhorro(double precio) {
@@ -115,11 +127,9 @@ class _SearchPageState extends State<SearchPage> {
 
     return 'Ahorras \$${_formatearPrecio(ahorro)}';
   }
+
   List<String> get _tiendas {
-    return _todosResultados
-        .map((p) => p['tienda'] as String)
-        .toSet()
-        .toList();
+    return _todosResultados.map((p) => p['tienda'] as String).toSet().toList();
   }
 
   Future<void> _toggleFavorito(Map<String, dynamic> item) async {
@@ -128,12 +138,14 @@ class _SearchPageState extends State<SearchPage> {
       if (id == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Debes iniciar sesión para editar favoritos')),
+            const SnackBar(
+              content: Text('Debes iniciar sesión para editar favoritos'),
+            ),
           );
         }
         return;
       }
-      
+
       final usuario = await ApiService.obtenerUsuario(id);
       if (usuario == null) {
         if (mounted) {
@@ -144,15 +156,18 @@ class _SearchPageState extends State<SearchPage> {
         return;
       }
 
-      List<dynamic> favoritosActuales = List.from(usuario['favoritos'] ?? usuario['alimentosFavoritos'] ?? []);
-      
+      List<dynamic> favoritosActuales = List.from(
+        usuario['favoritos'] ?? usuario['alimentosFavoritos'] ?? [],
+      );
+
       final itemLink = item['link'];
       final itemNombre = item['nombre'];
 
       // Verificar si ya existe buscando por el link o nombre
       int indexExiste = favoritosActuales.indexWhere((favorito) {
         if (favorito is Map) {
-          return favorito['link'] == itemLink || favorito['nombre'] == itemNombre;
+          return favorito['link'] == itemLink ||
+              favorito['nombre'] == itemNombre;
         }
         return favorito == itemNombre;
       });
@@ -161,7 +176,7 @@ class _SearchPageState extends State<SearchPage> {
         // Quitar de favoritos
         favoritosActuales.removeAt(indexExiste);
         final exito = await ApiService.actualizarLista(id, favoritosActuales);
-        
+
         if (mounted) {
           if (exito) {
             setState(() {
@@ -184,16 +199,18 @@ class _SearchPageState extends State<SearchPage> {
           "precio": "\$${_formatearPrecio(item['precio'] as double)}",
           "tienda": item['tienda'],
           "imagen": item['imagen'],
-          "link": itemLink
+          "link": itemLink,
         };
-        
+
         favoritosActuales.add(productoFavorito);
         final exito = await ApiService.actualizarLista(id, favoritosActuales);
-        
+
         if (mounted) {
           if (exito) {
             setState(() {
-              _enFavoritos.add(itemLink?.toString() ?? itemNombre?.toString() ?? '');
+              _enFavoritos.add(
+                itemLink?.toString() ?? itemNombre?.toString() ?? '',
+              );
             });
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -219,12 +236,21 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
+    final usarMenuLateral = NavigationModeService.instance.isDrawerMode;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
-      drawer: const CustomDrawer(),
       appBar: AppBar(
-        title: const Text('Buscar en Tuluá',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        leading: usarMenuLateral
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => context.go('/home'),
+              )
+            : null,
+        title: const Text(
+          'Buscar en Tuluá',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
         backgroundColor: const Color(0xFF1D9E75),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
@@ -243,28 +269,39 @@ class _SearchPageState extends State<SearchPage> {
                         controller: _controller,
                         decoration: InputDecoration(
                           hintText: 'Ej: Arroz, Café, Leche...',
-                          prefixIcon: const Icon(Icons.shopping_cart_outlined,
-                              color: Color(0xFF1D9E75)),
+                          prefixIcon: const Icon(
+                            Icons.shopping_cart_outlined,
+                            color: Color(0xFF1D9E75),
+                          ),
                           border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10)),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                             borderSide: const BorderSide(
-                                color: Color(0xFF1D9E75), width: 2),
+                              color: Color(0xFF1D9E75),
+                              width: 2,
+                            ),
                           ),
                         ),
-                        onSubmitted: (_) => _ejecutarBusqueda(nuevaBusqueda: true),
+                        onSubmitted: (_) =>
+                            _ejecutarBusqueda(nuevaBusqueda: true),
                       ),
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton(
-                      onPressed: _cargando ? null : () => _ejecutarBusqueda(nuevaBusqueda: true),
+                      onPressed: _cargando
+                          ? null
+                          : () => _ejecutarBusqueda(nuevaBusqueda: true),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF1D9E75),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 14),
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
                       ),
                       child: const Icon(Icons.search, color: Colors.white),
                     ),
@@ -276,35 +313,42 @@ class _SearchPageState extends State<SearchPage> {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      const Text('Ordenar: ',
-                          style: TextStyle(color: Colors.grey, fontSize: 13)),
+                      const Text(
+                        'Ordenar: ',
+                        style: TextStyle(color: Colors.grey, fontSize: 13),
+                      ),
                       _buildFiltroChip('Relevancia', 'OrderByScoreDESC'),
                       const SizedBox(width: 8),
                       _buildFiltroChip('Más barato', 'OrderByPriceASC'),
                       if (_tiendas.isNotEmpty) ...[
                         const SizedBox(width: 16),
-                        const Text('Tienda: ',
-                            style: TextStyle(color: Colors.grey, fontSize: 13)),
-                        ..._tiendas.map((tienda) => Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: FilterChip(
-                                label: Text(tienda),
-                                selected: _tiendasSeleccionadas.contains(tienda),
-                                selectedColor:
-                                    const Color(0xFF1D9E75).withOpacity(0.2),
-                                checkmarkColor: const Color(0xFF1D9E75),
-                                onSelected: (selected) {
-                                  setState(() {
-                                    if (selected) {
-                                      _tiendasSeleccionadas.add(tienda);
-                                    } else {
-                                      _tiendasSeleccionadas.remove(tienda);
-                                    }
-                                  });
-                                  _aplicarFiltros();
-                                },
-                              ),
-                            )),
+                        const Text(
+                          'Tienda: ',
+                          style: TextStyle(color: Colors.grey, fontSize: 13),
+                        ),
+                        ..._tiendas.map(
+                          (tienda) => Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: FilterChip(
+                              label: Text(tienda),
+                              selected: _tiendasSeleccionadas.contains(tienda),
+                              selectedColor: const Color(
+                                0xFF1D9E75,
+                              ).withOpacity(0.2),
+                              checkmarkColor: const Color(0xFF1D9E75),
+                              onSelected: (selected) {
+                                setState(() {
+                                  if (selected) {
+                                    _tiendasSeleccionadas.add(tienda);
+                                  } else {
+                                    _tiendasSeleccionadas.remove(tienda);
+                                  }
+                                });
+                                _aplicarFiltros();
+                              },
+                            ),
+                          ),
+                        ),
                       ],
                     ],
                   ),
@@ -322,9 +366,10 @@ class _SearchPageState extends State<SearchPage> {
                   Text(
                     '${_resultadosFiltrados.length} resultados encontrados',
                     style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500),
+                      color: Colors.grey,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),
@@ -339,8 +384,10 @@ class _SearchPageState extends State<SearchPage> {
                   children: [
                     CircularProgressIndicator(color: Color(0xFF1D9E75)),
                     SizedBox(height: 16),
-                    Text('Buscando en supermercados...',
-                        style: TextStyle(color: Colors.grey)),
+                    Text(
+                      'Buscando en supermercados...',
+                      style: TextStyle(color: Colors.grey),
+                    ),
                   ],
                 ),
               ),
@@ -358,12 +405,18 @@ class _SearchPageState extends State<SearchPage> {
                   children: [
                     Text('🔍', style: TextStyle(fontSize: 48)),
                     SizedBox(height: 16),
-                    Text('No encontramos productos',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w600)),
+                    Text(
+                      'No encontramos productos',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     SizedBox(height: 8),
-                    Text('Intenta con otro término de búsqueda',
-                        style: TextStyle(color: Colors.grey)),
+                    Text(
+                      'Intenta con otro término de búsqueda',
+                      style: TextStyle(color: Colors.grey),
+                    ),
                   ],
                 ),
               ),
@@ -378,13 +431,19 @@ class _SearchPageState extends State<SearchPage> {
                   children: [
                     Text('🛒', style: TextStyle(fontSize: 48)),
                     SizedBox(height: 16),
-                    Text('Busca y compara precios',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w600)),
+                    Text(
+                      'Busca y compara precios',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     SizedBox(height: 8),
-                    Text('Encuentra el mejor precio entre\nÉxito y Olímpica',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey)),
+                    Text(
+                      'Encuentra el mejor precio entre\nÉxito y Olímpica',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey),
+                    ),
                   ],
                 ),
               ),
@@ -400,39 +459,48 @@ class _SearchPageState extends State<SearchPage> {
                   final item = _resultadosFiltrados[index];
                   final ahorro = _calcularAhorro(item['precio'] as double);
                   final esMasBarato = ahorro.isNotEmpty;
-                  final esFavorito = _enFavoritos.contains(item['link']) || _enFavoritos.contains(item['nombre']);
+                  final esFavorito =
+                      _enFavoritos.contains(item['link']) ||
+                      _enFavoritos.contains(item['nombre']);
 
                   return GestureDetector(
                     onTap: () async {
                       final url = Uri.parse(item['link'] ?? '');
                       try {
-                        await launchUrl(url,
-                            mode: LaunchMode.externalApplication);
+                        await launchUrl(
+                          url,
+                          mode: LaunchMode.externalApplication,
+                        );
                       } catch (e) {
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                                content:
-                                    Text('No se pudo abrir el producto')),
+                              content: Text('No se pudo abrir el producto'),
+                            ),
                           );
                         }
                       }
                     },
                     child: Container(
                       margin: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 6),
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(16),
                         border: esMasBarato
                             ? Border.all(
-                                color: const Color(0xFF1D9E75), width: 2)
+                                color: const Color(0xFF1D9E75),
+                                width: 2,
+                              )
                             : null,
                         boxShadow: [
                           BoxShadow(
-                              color: Colors.black.withOpacity(0.06),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2))
+                            color: Colors.black.withOpacity(0.06),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
                         ],
                       ),
                       child: Column(
@@ -443,23 +511,30 @@ class _SearchPageState extends State<SearchPage> {
                             Container(
                               width: double.infinity,
                               padding: const EdgeInsets.symmetric(
-                                  vertical: 6, horizontal: 12),
+                                vertical: 6,
+                                horizontal: 12,
+                              ),
                               decoration: const BoxDecoration(
                                 color: Color(0xFF1D9E75),
                                 borderRadius: BorderRadius.vertical(
-                                    top: Radius.circular(14)),
+                                  top: Radius.circular(14),
+                                ),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.local_offer,
-                                      color: Colors.white, size: 14),
+                                  const Icon(
+                                    Icons.local_offer,
+                                    color: Colors.white,
+                                    size: 14,
+                                  ),
                                   const SizedBox(width: 6),
                                   Text(
                                     '¡Más barato! $ahorro',
                                     style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600),
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -483,8 +558,9 @@ class _SearchPageState extends State<SearchPage> {
                                       height: 90,
                                       color: Colors.grey[100],
                                       child: const Icon(
-                                          Icons.image_not_supported,
-                                          color: Colors.grey),
+                                        Icons.image_not_supported,
+                                        color: Colors.grey,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -499,17 +575,16 @@ class _SearchPageState extends State<SearchPage> {
                                       Text(
                                         item['nombre'] ?? '',
                                         style: const TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600),
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       const SizedBox(height: 4),
                                       // Marca
                                       if (item['marca'] != null &&
-                                          item['marca']
-                                              .toString()
-                                              .isNotEmpty)
+                                          item['marca'].toString().isNotEmpty)
                                         Text(
                                           item['marca'].toString(),
                                           style: TextStyle(
@@ -531,8 +606,11 @@ class _SearchPageState extends State<SearchPage> {
                                       // Tienda
                                       Row(
                                         children: [
-                                          const Icon(Icons.store,
-                                              size: 14, color: Colors.grey),
+                                          const Icon(
+                                            Icons.store,
+                                            size: 14,
+                                            color: Colors.grey,
+                                          ),
                                           const SizedBox(width: 4),
                                           Text(
                                             item['tienda']
@@ -555,39 +633,55 @@ class _SearchPageState extends State<SearchPage> {
                                               .isNotEmpty)
                                         Row(
                                           children: [
-                                            const Icon(Icons.update,
-                                                size: 12, color: Colors.grey),
+                                            const Icon(
+                                              Icons.update,
+                                              size: 12,
+                                              color: Colors.grey,
+                                            ),
                                             const SizedBox(width: 4),
                                             Text(
                                               'Act: ${item['fechaActualizacion']}',
                                               style: const TextStyle(
-                                                  color: Colors.grey,
-                                                  fontSize: 11),
+                                                color: Colors.grey,
+                                                fontSize: 11,
+                                              ),
                                             ),
                                           ],
                                         ),
                                       const SizedBox(height: 4),
                                       // Ver en tienda
                                       Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
                                         children: [
                                           Row(
                                             children: [
-                                              const Icon(Icons.open_in_new,
-                                                  size: 12, color: Colors.grey),
+                                              const Icon(
+                                                Icons.open_in_new,
+                                                size: 12,
+                                                color: Colors.grey,
+                                              ),
                                               const SizedBox(width: 4),
                                               const Text(
                                                 'Ver en tienda',
                                                 style: TextStyle(
-                                                    color: Colors.grey,
-                                                    fontSize: 11),
+                                                  color: Colors.grey,
+                                                  fontSize: 11,
+                                                ),
                                               ),
                                             ],
                                           ),
                                           IconButton(
-                                            icon: Icon(esFavorito ? Icons.favorite : Icons.favorite_border,
-                                                color: const Color(0xFF1D9E75), size: 20),
-                                            onPressed: () => _toggleFavorito(item as Map<String, dynamic>),
+                                            icon: Icon(
+                                              esFavorito
+                                                  ? Icons.favorite
+                                                  : Icons.favorite_border,
+                                              color: const Color(0xFF1D9E75),
+                                              size: 20,
+                                            ),
+                                            onPressed: () => _toggleFavorito(
+                                              item as Map<String, dynamic>,
+                                            ),
                                             padding: EdgeInsets.zero,
                                             constraints: const BoxConstraints(),
                                           ),

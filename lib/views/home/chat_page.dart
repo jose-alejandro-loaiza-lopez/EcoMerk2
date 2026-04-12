@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../widgets/custom_drawer.dart';
+import 'package:go_router/go_router.dart';
+import 'package:ecomerk2/data/services/navigation_mode_service.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -57,7 +58,10 @@ class _ChatPageState extends State<ChatPage> {
           '3. Compra granos y enlatados en mayor cantidad\n\n'
           '¿Quieres que compare algún producto específico entre Éxito, Olímpica y Surtifamiliar?';
     }
-    if (p.contains('éxito') || p.contains('olímpica') || p.contains('surtifamiliar') || p.contains('tienda')) {
+    if (p.contains('éxito') ||
+        p.contains('olímpica') ||
+        p.contains('surtifamiliar') ||
+        p.contains('tienda')) {
       return '🏪 Puedo ayudarte a comparar precios entre Éxito, Olímpica y Surtifamiliar. '
           'Usa el buscador de la app para ver en tiempo real cuál tienda tiene el precio más bajo. '
           '¿Qué producto quieres comparar?';
@@ -83,10 +87,17 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
+    final usarMenuLateral = NavigationModeService.instance.isDrawerMode;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F3),
-      drawer: const CustomDrawer(),
       appBar: AppBar(
+        leading: usarMenuLateral
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => context.go('/home'),
+              )
+            : null,
         backgroundColor: const Color(0xFF1D9E75),
         title: Row(
           children: [
@@ -97,20 +108,28 @@ class _ChatPageState extends State<ChatPage> {
                 color: const Color(0xFF0F6E56),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.auto_awesome_rounded,
-                  color: Colors.white, size: 20),
+              child: const Icon(
+                Icons.auto_awesome_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 10),
             const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Asistente IA',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600)),
-                Text('Prototipo — EcoMerca2',
-                    style: TextStyle(color: Color(0xFF9FE1CB), fontSize: 11)),
+                Text(
+                  'Asistente IA',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  'Prototipo — EcoMerca2',
+                  style: TextStyle(color: Color(0xFF9FE1CB), fontSize: 11),
+                ),
               ],
             ),
           ],
@@ -162,15 +181,20 @@ class _ChatPageState extends State<ChatPage> {
                     maxLines: null,
                     decoration: InputDecoration(
                       hintText: 'Pregúntame sobre recetas o precios...',
-                      hintStyle:
-                          TextStyle(color: Colors.grey[400], fontSize: 14),
+                      hintStyle: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 14,
+                      ),
                       filled: true,
                       fillColor: const Color(0xFFF5F5F5),
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide.none),
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
                     onSubmitted: _enviarMensaje,
                   ),
@@ -185,8 +209,11 @@ class _ChatPageState extends State<ChatPage> {
                       color: const Color(0xFF1D9E75),
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: const Icon(Icons.send_rounded,
-                        color: Colors.white, size: 20),
+                    child: const Icon(
+                      Icons.send_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                 ),
               ],
@@ -210,15 +237,21 @@ class _ChatPageState extends State<ChatPage> {
               color: const Color(0xFFE1F5EE),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Icon(Icons.auto_awesome_rounded,
-                color: Color(0xFF1D9E75), size: 36),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              color: Color(0xFF1D9E75),
+              size: 36,
+            ),
           ),
           const SizedBox(height: 16),
-          const Text('¿En qué te ayudo hoy?',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF2C2C2A))),
+          const Text(
+            '¿En qué te ayudo hoy?',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF2C2C2A),
+            ),
+          ),
           const SizedBox(height: 8),
           Text(
             'Pregúntame sobre recetas, precios o cómo ahorrar en tu mercado',
@@ -226,34 +259,48 @@ class _ChatPageState extends State<ChatPage> {
             style: TextStyle(color: Colors.grey[500], fontSize: 13),
           ),
           const SizedBox(height: 24),
-          ..._sugerencias.map((s) => GestureDetector(
-                onTap: () => _enviarMensaje(s),
-                child: Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                        color: const Color(0xFFE8E8E8), width: 0.5),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.auto_awesome_rounded,
-                          color: Color(0xFF1D9E75), size: 16),
-                      const SizedBox(width: 10),
-                      Expanded(
-                          child: Text(s,
-                              style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Color(0xFF2C2C2A)))),
-                      const Icon(Icons.chevron_right,
-                          color: Colors.grey, size: 16),
-                    ],
+          ..._sugerencias.map(
+            (s) => GestureDetector(
+              onTap: () => _enviarMensaje(s),
+              child: Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFFE8E8E8),
+                    width: 0.5,
                   ),
                 ),
-              )),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.auto_awesome_rounded,
+                      color: Color(0xFF1D9E75),
+                      size: 16,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        s,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF2C2C2A),
+                        ),
+                      ),
+                    ),
+                    const Icon(
+                      Icons.chevron_right,
+                      color: Colors.grey,
+                      size: 16,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -264,8 +311,9 @@ class _ChatPageState extends State<ChatPage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        mainAxisAlignment:
-            esUsuario ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: esUsuario
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!esUsuario) ...[
@@ -276,15 +324,17 @@ class _ChatPageState extends State<ChatPage> {
                 color: const Color(0xFF1D9E75),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.auto_awesome_rounded,
-                  color: Colors.white, size: 16),
+              child: const Icon(
+                Icons.auto_awesome_rounded,
+                color: Colors.white,
+                size: 16,
+              ),
             ),
             const SizedBox(width: 8),
           ],
           Flexible(
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: esUsuario ? const Color(0xFF1D9E75) : Colors.white,
                 borderRadius: BorderRadius.only(
@@ -298,14 +348,13 @@ class _ChatPageState extends State<ChatPage> {
                     color: Colors.black.withOpacity(0.05),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
-                  )
+                  ),
                 ],
               ),
               child: Text(
                 msg['texto'] ?? '',
                 style: TextStyle(
-                  color:
-                      esUsuario ? Colors.white : const Color(0xFF2C2C2A),
+                  color: esUsuario ? Colors.white : const Color(0xFF2C2C2A),
                   fontSize: 14,
                 ),
               ),
@@ -329,13 +378,15 @@ class _ChatPageState extends State<ChatPage> {
               color: const Color(0xFF1D9E75),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.auto_awesome_rounded,
-                color: Colors.white, size: 16),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              color: Colors.white,
+              size: 16,
+            ),
           ),
           const SizedBox(width: 8),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),

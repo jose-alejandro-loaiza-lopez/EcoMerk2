@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:ecomerk2/data/services/navigation_mode_service.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
+import 'package:ecomerk2/data/services/security_manager.dart';
 import 'routes/app_routes.dart';
-import 'themes/app_theme.dart';void main() {
+import 'themes/app_theme.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NavigationModeService.instance.load();
   runApp(const MyApp());
 }
 
@@ -13,7 +19,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
-      title: 'EcoMerk',
+      title: 'EcoMerk2',
       theme: AppTheme.defaultTheme,
       routerConfig: AppRoutes.router,
     );
@@ -35,6 +41,26 @@ class _AuthCheckState extends State<AuthCheck> {
 
   Future<void> _verificarSesion() async {
     await Future.delayed(const Duration(milliseconds: 500));
+
+    // Obtener nuevas llaves RSA/AES al iniciar
+    await SecurityManager().refreshKeys();
+
+    // Intentar inicio de sesión automático para obtener token nuevo
+    final credenciales = await ApiService.obtenerCredenciales();
+    if (credenciales != null &&
+        credenciales['email'] != null &&
+        credenciales['password'] != null) {
+      final loginResult = await ApiService.login(
+        email: credenciales['email']!,
+        password: credenciales['password']!,
+      );
+      if (loginResult['exito'] == true) {
+        if (mounted) context.go('/home');
+        return;
+      }
+    }
+
+    // Fallback: verificar si ya hay token almacenado
     final token = await ApiService.obtenerToken();
     final userId = await ApiService.obtenerUserId();
 
@@ -55,12 +81,14 @@ class _AuthCheckState extends State<AuthCheck> {
           children: [
             Text('🛒', style: TextStyle(fontSize: 64)),
             SizedBox(height: 16),
-            Text('EcoMerca2',
+            Text(
+              'EcoMerk2',
               style: TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF0F6E56),
-              )),
+              ),
+            ),
             SizedBox(height: 24),
             CircularProgressIndicator(color: Color(0xFF1D9E75)),
           ],

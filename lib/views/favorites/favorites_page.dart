@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../widgets/custom_drawer.dart';
+import 'package:go_router/go_router.dart';
+import 'package:ecomerk2/data/services/navigation_mode_service.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
 import 'package:ecomerk2/data/services/market_api_service.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -71,9 +72,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     });
 
     try {
-      final resultados = await MarketApiService.buscarEnTiendas(
-        producto,
-      );
+      final resultados = await MarketApiService.buscarEnTiendas(producto);
       if (mounted) {
         final Set<String> tiendasVistas = {};
         final List<dynamic> masBaratosPorTienda = [];
@@ -124,10 +123,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final usarMenuLateral = NavigationModeService.instance.isDrawerMode;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
-      drawer: const CustomDrawer(),
       appBar: AppBar(
+        leading: usarMenuLateral
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => context.go('/home'),
+              )
+            : null,
         title: const Text(
           'Mi lista de compras',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
@@ -270,10 +276,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
                               onDismissed: (_) => _eliminarProducto(index),
                               child: GestureDetector(
                                 onTap: () async {
-                                  if (isMap && item['link'] != null && item['link'].toString().isNotEmpty) {
-                                    final url = Uri.parse(item['link'].toString());
+                                  if (isMap &&
+                                      item['link'] != null &&
+                                      item['link'].toString().isNotEmpty) {
+                                    final url = Uri.parse(
+                                      item['link'].toString(),
+                                    );
                                     try {
-                                      await launchUrl(url, mode: LaunchMode.externalApplication);
+                                      await launchUrl(
+                                        url,
+                                        mode: LaunchMode.externalApplication,
+                                      );
                                     } catch (_) {}
                                   }
                                 },
@@ -291,464 +304,476 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                     ],
                                   ),
                                   child: Column(
-                                  children: [
-                                    // Fila principal del producto
-                                    Padding(
-                                      padding: const EdgeInsets.all(14),
-                                      child: Row(
-                                        children: [
-                                          if (isMap &&
-                                              (item['imagen']
-                                                      ?.toString()
-                                                      .isNotEmpty ??
-                                                  false))
-                                            ClipRRect(
-                                              borderRadius:
-                                                  BorderRadius.circular(10),
-                                              child: Image.network(
-                                                item['imagen'],
-                                                width: 42,
-                                                height: 42,
-                                                fit: BoxFit.contain,
-                                                errorBuilder: (_, __, ___) =>
-                                                    _buildIconPlaceholder(),
-                                              ),
-                                            )
-                                          else
-                                            _buildIconPlaceholder(),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  nombreProducto,
-                                                  style: const TextStyle(
-                                                    fontSize: 15,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: Color(0xFF2C2C2A),
-                                                  ),
-                                                  maxLines: 2,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
+                                    children: [
+                                      // Fila principal del producto
+                                      Padding(
+                                        padding: const EdgeInsets.all(14),
+                                        child: Row(
+                                          children: [
+                                            if (isMap &&
+                                                (item['imagen']
+                                                        ?.toString()
+                                                        .isNotEmpty ??
+                                                    false))
+                                              ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                                child: Image.network(
+                                                  item['imagen'],
+                                                  width: 42,
+                                                  height: 42,
+                                                  fit: BoxFit.contain,
+                                                  errorBuilder: (_, __, ___) =>
+                                                      _buildIconPlaceholder(),
                                                 ),
-                                                if (isMap &&
-                                                    item['precio'] != null &&
-                                                    item['precio'] != "\$0")
+                                              )
+                                            else
+                                              _buildIconPlaceholder(),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
                                                   Text(
-                                                    'Guardado a: ${item['precio']} · ${item['tienda'] ?? ''}',
+                                                    nombreProducto,
                                                     style: const TextStyle(
-                                                      color: Colors.grey,
-                                                      fontSize: 11,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                    ),
-                                                  ),
-                                                if (precios != null &&
-                                                    precios.isNotEmpty)
-                                                  Text(
-                                                    '${isMap && item['precio'] != null && item['precio'] != "\$0" ? "Mejor opción" : "Desde"}: \$${_formatearPrecio(precios[0]['precio'] as double)} · ${precios[0]['tienda']}',
-                                                    style: const TextStyle(
-                                                      color: Color(0xFF1D9E75),
-                                                      fontSize: 12,
+                                                      fontSize: 15,
                                                       fontWeight:
                                                           FontWeight.w600,
+                                                      color: Color(0xFF2C2C2A),
                                                     ),
+                                                    maxLines: 2,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
                                                   ),
-                                              ],
-                                            ),
-                                          ),
-                                          // Botones de acción
-                                          if (!buscando) ...[
-                                            // Botón comparar
-                                            GestureDetector(
-                                              onTap: () => precios != null
-                                                  ? setState(() {
-                                                      if (expandido) {
-                                                        _expandidos.remove(
-                                                          nombreProducto,
-                                                        );
-                                                      } else {
-                                                        _expandidos.add(
-                                                          nombreProducto,
-                                                        );
-                                                      }
-                                                    })
-                                                  : _compararPrecios(
-                                                      nombreProducto,
-                                                    ),
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 6,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: precios != null
-                                                      ? const Color(
-                                                          0xFF1D9E75,
-                                                        ).withOpacity(0.1)
-                                                      : const Color(0xFF1D9E75),
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                ),
-                                                child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    Icon(
-                                                      precios != null
-                                                          ? (expandido
-                                                                ? Icons
-                                                                      .keyboard_arrow_up
-                                                                : Icons
-                                                                      .keyboard_arrow_down)
-                                                          : Icons
-                                                                .compare_arrows,
-                                                      color: precios != null
-                                                          ? const Color(
-                                                              0xFF1D9E75,
-                                                            )
-                                                          : Colors.white,
-                                                      size: 16,
-                                                    ),
-                                                    const SizedBox(width: 4),
+                                                  if (isMap &&
+                                                      item['precio'] != null &&
+                                                      item['precio'] != "\$0")
                                                     Text(
-                                                      precios != null
-                                                          ? (expandido
-                                                                ? 'Ocultar'
-                                                                : 'Ver precios')
-                                                          : 'Comparar',
-                                                      style: TextStyle(
+                                                      'Guardado a: ${item['precio']} · ${item['tienda'] ?? ''}',
+                                                      style: const TextStyle(
+                                                        color: Colors.grey,
+                                                        fontSize: 11,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                  if (precios != null &&
+                                                      precios.isNotEmpty)
+                                                    Text(
+                                                      '${isMap && item['precio'] != null && item['precio'] != "\$0" ? "Mejor opción" : "Desde"}: \$${_formatearPrecio(precios[0]['precio'] as double)} · ${precios[0]['tienda']}',
+                                                      style: const TextStyle(
+                                                        color: Color(
+                                                          0xFF1D9E75,
+                                                        ),
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
+                                            ),
+                                            // Botones de acción
+                                            if (!buscando) ...[
+                                              // Botón comparar
+                                              GestureDetector(
+                                                onTap: () => precios != null
+                                                    ? setState(() {
+                                                        if (expandido) {
+                                                          _expandidos.remove(
+                                                            nombreProducto,
+                                                          );
+                                                        } else {
+                                                          _expandidos.add(
+                                                            nombreProducto,
+                                                          );
+                                                        }
+                                                      })
+                                                    : _compararPrecios(
+                                                        nombreProducto,
+                                                      ),
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 10,
+                                                        vertical: 6,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: precios != null
+                                                        ? const Color(
+                                                            0xFF1D9E75,
+                                                          ).withOpacity(0.1)
+                                                        : const Color(
+                                                            0xFF1D9E75,
+                                                          ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          8,
+                                                        ),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        precios != null
+                                                            ? (expandido
+                                                                  ? Icons
+                                                                        .keyboard_arrow_up
+                                                                  : Icons
+                                                                        .keyboard_arrow_down)
+                                                            : Icons
+                                                                  .compare_arrows,
                                                         color: precios != null
                                                             ? const Color(
                                                                 0xFF1D9E75,
                                                               )
                                                             : Colors.white,
-                                                        fontSize: 11,
+                                                        size: 16,
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        precios != null
+                                                            ? (expandido
+                                                                  ? 'Ocultar'
+                                                                  : 'Ver precios')
+                                                            : 'Comparar',
+                                                        style: TextStyle(
+                                                          color: precios != null
+                                                              ? const Color(
+                                                                  0xFF1D9E75,
+                                                                )
+                                                              : Colors.white,
+                                                          fontSize: 11,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ] else
+                                              const SizedBox(
+                                                width: 80,
+                                                child: Center(
+                                                  child: SizedBox(
+                                                    width: 20,
+                                                    height: 20,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                          color: Color(
+                                                            0xFF1D9E75,
+                                                          ),
+                                                          strokeWidth: 2,
+                                                        ),
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+
+                                      // Panel de comparación expandible
+                                      if (expandido && precios != null)
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF8FFFE),
+                                            borderRadius:
+                                                const BorderRadius.vertical(
+                                                  bottom: Radius.circular(16),
+                                                ),
+                                            border: Border(
+                                              top: BorderSide(
+                                                color: Colors.grey.shade100,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Padding(
+                                                padding:
+                                                    const EdgeInsets.fromLTRB(
+                                                      14,
+                                                      12,
+                                                      14,
+                                                      8,
+                                                    ),
+                                                child: Row(
+                                                  children: [
+                                                    const Icon(
+                                                      Icons.storefront,
+                                                      size: 14,
+                                                      color: Colors.grey,
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Text(
+                                                      'Comparación de precios · ${precios.length} resultado${precios.length != 1 ? 's' : ''}',
+                                                      style: const TextStyle(
+                                                        color: Colors.grey,
+                                                        fontSize: 12,
                                                         fontWeight:
-                                                            FontWeight.w600,
+                                                            FontWeight.w500,
                                                       ),
                                                     ),
                                                   ],
                                                 ),
                                               ),
-                                            ),
-                                          ] else
-                                            const SizedBox(
-                                              width: 80,
-                                              child: Center(
-                                                child: SizedBox(
-                                                  width: 20,
-                                                  height: 20,
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                        color: Color(
-                                                          0xFF1D9E75,
-                                                        ),
-                                                        strokeWidth: 2,
-                                                      ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-
-                                    // Panel de comparación expandible
-                                    if (expandido && precios != null)
-                                      Container(
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFF8FFFE),
-                                          borderRadius:
-                                              const BorderRadius.vertical(
-                                                bottom: Radius.circular(16),
-                                              ),
-                                          border: Border(
-                                            top: BorderSide(
-                                              color: Colors.grey.shade100,
-                                            ),
-                                          ),
-                                        ),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.fromLTRB(
-                                                    14,
-                                                    12,
-                                                    14,
-                                                    8,
-                                                  ),
-                                              child: Row(
-                                                children: [
-                                                  const Icon(
-                                                    Icons.storefront,
-                                                    size: 14,
-                                                    color: Colors.grey,
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Text(
-                                                    'Comparación de precios · ${precios.length} resultado${precios.length != 1 ? 's' : ''}',
-                                                    style: const TextStyle(
+                                              if (precios.isEmpty)
+                                                const Padding(
+                                                  padding: EdgeInsets.all(16),
+                                                  child: Text(
+                                                    'No se encontraron precios para este producto',
+                                                    style: TextStyle(
                                                       color: Colors.grey,
-                                                      fontSize: 12,
-                                                      fontWeight:
-                                                          FontWeight.w500,
+                                                      fontSize: 13,
                                                     ),
                                                   ),
-                                                ],
-                                              ),
-                                            ),
-                                            if (precios.isEmpty)
-                                              const Padding(
-                                                padding: EdgeInsets.all(16),
-                                                child: Text(
-                                                  'No se encontraron precios para este producto',
-                                                  style: TextStyle(
-                                                    color: Colors.grey,
-                                                    fontSize: 13,
-                                                  ),
-                                                ),
-                                              )
-                                            else
-                                              ...precios.asMap().entries.map((
-                                                entry,
-                                              ) {
-                                                final i = entry.key;
-                                                final p = entry.value;
-                                                final esMasBarato = i == 0;
-                                                return GestureDetector(
-                                                  onTap: () async {
-                                                    final url = Uri.parse(
-                                                      p['link'] ?? '',
-                                                    );
-                                                    try {
-                                                      await launchUrl(
-                                                        url,
-                                                        mode: LaunchMode
-                                                            .externalApplication,
+                                                )
+                                              else
+                                                ...precios.asMap().entries.map((
+                                                  entry,
+                                                ) {
+                                                  final i = entry.key;
+                                                  final p = entry.value;
+                                                  final esMasBarato = i == 0;
+                                                  return GestureDetector(
+                                                    onTap: () async {
+                                                      final url = Uri.parse(
+                                                        p['link'] ?? '',
                                                       );
-                                                    } catch (_) {}
-                                                  },
-                                                  child: Container(
-                                                    margin:
-                                                        const EdgeInsets.fromLTRB(
-                                                          14,
-                                                          0,
-                                                          14,
-                                                          8,
-                                                        ),
-                                                    padding:
-                                                        const EdgeInsets.all(
-                                                          12,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: esMasBarato
-                                                          ? const Color(
-                                                              0xFF1D9E75,
-                                                            ).withOpacity(0.08)
-                                                          : Colors.white,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            10,
+                                                      try {
+                                                        await launchUrl(
+                                                          url,
+                                                          mode: LaunchMode
+                                                              .externalApplication,
+                                                        );
+                                                      } catch (_) {}
+                                                    },
+                                                    child: Container(
+                                                      margin:
+                                                          const EdgeInsets.fromLTRB(
+                                                            14,
+                                                            0,
+                                                            14,
+                                                            8,
                                                           ),
-                                                      border: Border.all(
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                            12,
+                                                          ),
+                                                      decoration: BoxDecoration(
                                                         color: esMasBarato
                                                             ? const Color(
                                                                 0xFF1D9E75,
+                                                              ).withOpacity(
+                                                                0.08,
                                                               )
-                                                            : Colors
-                                                                  .grey
-                                                                  .shade200,
+                                                            : Colors.white,
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              10,
+                                                            ),
+                                                        border: Border.all(
+                                                          color: esMasBarato
+                                                              ? const Color(
+                                                                  0xFF1D9E75,
+                                                                )
+                                                              : Colors
+                                                                    .grey
+                                                                    .shade200,
+                                                        ),
                                                       ),
-                                                    ),
-                                                    child: Row(
-                                                      children: [
-                                                        // Imagen del producto
-                                                        ClipRRect(
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                8,
-                                                              ),
-                                                          child: Image.network(
-                                                            p['imagen'] ?? '',
-                                                            width: 48,
-                                                            height: 48,
-                                                            fit: BoxFit.contain,
-                                                            errorBuilder:
-                                                                (
-                                                                  _,
-                                                                  __,
-                                                                  ___,
-                                                                ) => Container(
-                                                                  width: 48,
-                                                                  height: 48,
-                                                                  color: Colors
-                                                                      .grey[100],
-                                                                  child: const Icon(
-                                                                    Icons
-                                                                        .image_not_supported,
-                                                                    color: Colors
-                                                                        .grey,
-                                                                    size: 20,
-                                                                  ),
+                                                      child: Row(
+                                                        children: [
+                                                          // Imagen del producto
+                                                          ClipRRect(
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  8,
                                                                 ),
+                                                            child: Image.network(
+                                                              p['imagen'] ?? '',
+                                                              width: 48,
+                                                              height: 48,
+                                                              fit: BoxFit
+                                                                  .contain,
+                                                              errorBuilder:
+                                                                  (
+                                                                    _,
+                                                                    __,
+                                                                    ___,
+                                                                  ) => Container(
+                                                                    width: 48,
+                                                                    height: 48,
+                                                                    color: Colors
+                                                                        .grey[100],
+                                                                    child: const Icon(
+                                                                      Icons
+                                                                          .image_not_supported,
+                                                                      color: Colors
+                                                                          .grey,
+                                                                      size: 20,
+                                                                    ),
+                                                                  ),
+                                                            ),
                                                           ),
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 10,
-                                                        ),
-                                                        Expanded(
-                                                          child: Column(
+                                                          const SizedBox(
+                                                            width: 10,
+                                                          ),
+                                                          Expanded(
+                                                            child: Column(
+                                                              crossAxisAlignment:
+                                                                  CrossAxisAlignment
+                                                                      .start,
+                                                              children: [
+                                                                Text(
+                                                                  p['nombre'] ??
+                                                                      '',
+                                                                  style: const TextStyle(
+                                                                    fontSize:
+                                                                        12,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w500,
+                                                                  ),
+                                                                  maxLines: 1,
+                                                                  overflow:
+                                                                      TextOverflow
+                                                                          .ellipsis,
+                                                                ),
+                                                                const SizedBox(
+                                                                  height: 2,
+                                                                ),
+                                                                Row(
+                                                                  children: [
+                                                                    const Icon(
+                                                                      Icons
+                                                                          .store,
+                                                                      size: 11,
+                                                                      color: Colors
+                                                                          .grey,
+                                                                    ),
+                                                                    const SizedBox(
+                                                                      width: 3,
+                                                                    ),
+                                                                    Text(
+                                                                      p['tienda']
+                                                                          .toString()
+                                                                          .toUpperCase(),
+                                                                      style: TextStyle(
+                                                                        color: Colors
+                                                                            .grey[600],
+                                                                        fontSize:
+                                                                            10,
+                                                                        fontWeight:
+                                                                            FontWeight.bold,
+                                                                        letterSpacing:
+                                                                            0.5,
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                          Column(
                                                             crossAxisAlignment:
                                                                 CrossAxisAlignment
-                                                                    .start,
+                                                                    .end,
                                                             children: [
                                                               Text(
-                                                                p['nombre'] ??
-                                                                    '',
-                                                                style: const TextStyle(
-                                                                  fontSize: 12,
+                                                                '\$${_formatearPrecio(p['precio'] as double)}',
+                                                                style: TextStyle(
+                                                                  fontSize: 16,
                                                                   fontWeight:
                                                                       FontWeight
-                                                                          .w500,
+                                                                          .w900,
+                                                                  color:
+                                                                      esMasBarato
+                                                                      ? const Color(
+                                                                          0xFF1D9E75,
+                                                                        )
+                                                                      : const Color(
+                                                                          0xFF2C2C2A,
+                                                                        ),
                                                                 ),
-                                                                maxLines: 1,
-                                                                overflow:
-                                                                    TextOverflow
-                                                                        .ellipsis,
                                                               ),
-                                                              const SizedBox(
-                                                                height: 2,
-                                                              ),
-                                                              Row(
-                                                                children: [
-                                                                  const Icon(
-                                                                    Icons.store,
-                                                                    size: 11,
-                                                                    color: Colors
-                                                                        .grey,
+                                                              if (esMasBarato)
+                                                                Container(
+                                                                  padding:
+                                                                      const EdgeInsets.symmetric(
+                                                                        horizontal:
+                                                                            6,
+                                                                        vertical:
+                                                                            2,
+                                                                      ),
+                                                                  decoration: BoxDecoration(
+                                                                    color: const Color(
+                                                                      0xFF1D9E75,
+                                                                    ),
+                                                                    borderRadius:
+                                                                        BorderRadius.circular(
+                                                                          4,
+                                                                        ),
                                                                   ),
-                                                                  const SizedBox(
-                                                                    width: 3,
-                                                                  ),
-                                                                  Text(
-                                                                    p['tienda']
-                                                                        .toString()
-                                                                        .toUpperCase(),
+                                                                  child: const Text(
+                                                                    '+ barato',
                                                                     style: TextStyle(
                                                                       color: Colors
-                                                                          .grey[600],
+                                                                          .white,
                                                                       fontSize:
-                                                                          10,
+                                                                          9,
                                                                       fontWeight:
                                                                           FontWeight
                                                                               .bold,
-                                                                      letterSpacing:
-                                                                          0.5,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              const SizedBox(
+                                                                height: 4,
+                                                              ),
+                                                              const Row(
+                                                                children: [
+                                                                  Icon(
+                                                                    Icons
+                                                                        .open_in_new,
+                                                                    size: 10,
+                                                                    color: Colors
+                                                                        .grey,
+                                                                  ),
+                                                                  SizedBox(
+                                                                    width: 2,
+                                                                  ),
+                                                                  Text(
+                                                                    'Ver',
+                                                                    style: TextStyle(
+                                                                      color: Colors
+                                                                          .grey,
+                                                                      fontSize:
+                                                                          10,
                                                                     ),
                                                                   ),
                                                                 ],
                                                               ),
                                                             ],
                                                           ),
-                                                        ),
-                                                        Column(
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .end,
-                                                          children: [
-                                                            Text(
-                                                              '\$${_formatearPrecio(p['precio'] as double)}',
-                                                              style: TextStyle(
-                                                                fontSize: 16,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w900,
-                                                                color:
-                                                                    esMasBarato
-                                                                    ? const Color(
-                                                                        0xFF1D9E75,
-                                                                      )
-                                                                    : const Color(
-                                                                        0xFF2C2C2A,
-                                                                      ),
-                                                              ),
-                                                            ),
-                                                            if (esMasBarato)
-                                                              Container(
-                                                                padding:
-                                                                    const EdgeInsets.symmetric(
-                                                                      horizontal:
-                                                                          6,
-                                                                      vertical:
-                                                                          2,
-                                                                    ),
-                                                                decoration: BoxDecoration(
-                                                                  color: const Color(
-                                                                    0xFF1D9E75,
-                                                                  ),
-                                                                  borderRadius:
-                                                                      BorderRadius.circular(
-                                                                        4,
-                                                                      ),
-                                                                ),
-                                                                child: const Text(
-                                                                  '+ barato',
-                                                                  style: TextStyle(
-                                                                    color: Colors
-                                                                        .white,
-                                                                    fontSize: 9,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .bold,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            const SizedBox(
-                                                              height: 4,
-                                                            ),
-                                                            const Row(
-                                                              children: [
-                                                                Icon(
-                                                                  Icons
-                                                                      .open_in_new,
-                                                                  size: 10,
-                                                                  color: Colors
-                                                                      .grey,
-                                                                ),
-                                                                SizedBox(
-                                                                  width: 2,
-                                                                ),
-                                                                Text(
-                                                                  'Ver',
-                                                                  style: TextStyle(
-                                                                    color: Colors
-                                                                        .grey,
-                                                                    fontSize:
-                                                                        10,
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ],
+                                                        ],
+                                                      ),
                                                     ),
-                                                  ),
-                                                );
-                                              }),
-                                            const SizedBox(height: 6),
-                                          ],
+                                                  );
+                                                }),
+                                              const SizedBox(height: 6),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
                               ),
                             );
                           },
