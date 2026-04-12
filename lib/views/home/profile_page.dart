@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:ecomerk2/data/services/navigation_mode_service.dart'
+    as nav_service;
 import 'package:ecomerk2/data/services/user_api_service.dart';
-import '../../widgets/custom_drawer.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -26,10 +27,7 @@ class _ProfilePageState extends State<ProfilePage>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    _fadeAnim = CurvedAnimation(
-      parent: _animController,
-      curve: Curves.easeOut,
-    );
+    _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
     _cargarPerfil();
   }
 
@@ -73,14 +71,21 @@ class _ProfilePageState extends State<ProfilePage>
 
   @override
   Widget build(BuildContext context) {
+    final usarMenuLateral =
+        nav_service.NavigationModeService.instance.isDrawerMode;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F3),
-      drawer: const CustomDrawer(),
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => context.go('/home'),
+        ),
         backgroundColor: const Color(0xFF1D9E75),
-        title: const Text('Mi Perfil',
-            style: TextStyle(
-                color: Colors.white, fontWeight: FontWeight.w600)),
+        title: const Text(
+          'Mi Perfil',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
@@ -91,7 +96,8 @@ class _ProfilePageState extends State<ProfilePage>
       ),
       body: _cargando
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF1D9E75)))
+              child: CircularProgressIndicator(color: Color(0xFF1D9E75)),
+            )
           : FadeTransition(
               opacity: _fadeAnim,
               child: SingleChildScrollView(
@@ -123,9 +129,10 @@ class _ProfilePageState extends State<ProfilePage>
                         child: Text(
                           _obtenerIniciales(),
                           style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 34,
-                              fontWeight: FontWeight.w700),
+                            color: Colors.white,
+                            fontSize: 34,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ),
@@ -133,15 +140,15 @@ class _ProfilePageState extends State<ProfilePage>
                     Text(
                       _nombreController.text,
                       style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF2C2C2A)),
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF2C2C2A),
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       _emailController.text,
-                      style:
-                          TextStyle(fontSize: 13, color: Colors.grey[500]),
+                      style: TextStyle(fontSize: 13, color: Colors.grey[500]),
                     ),
                     const SizedBox(height: 28),
 
@@ -153,33 +160,89 @@ class _ProfilePageState extends State<ProfilePage>
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                            color: const Color(0xFFE8E8E8), width: 0.5),
+                          color: const Color(0xFFE8E8E8),
+                          width: 0.5,
+                        ),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Información de la cuenta',
-                              style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF2C2C2A))),
+                          const Text(
+                            'Información de la cuenta',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF2C2C2A),
+                            ),
+                          ),
                           const SizedBox(height: 16),
                           _buildInfoRow(
-                              Icons.person_outline_rounded,
-                              'Nombre',
-                              _nombreController.text),
+                            Icons.person_outline_rounded,
+                            'Nombre',
+                            _nombreController.text,
+                          ),
                           const Divider(height: 24),
                           _buildInfoRow(
-                              Icons.email_outlined,
-                              'Correo',
-                              _emailController.text),
+                            Icons.email_outlined,
+                            'Correo',
+                            _emailController.text,
+                          ),
                           if (_usuario?['fechaNacimiento'] != null) ...[
                             const Divider(height: 24),
                             _buildInfoRow(
-                                Icons.cake_outlined,
-                                'Fecha de nacimiento',
-                                _usuario!['fechaNacimiento']),
+                              Icons.cake_outlined,
+                              'Fecha de nacimiento',
+                              _usuario!['fechaNacimiento'],
+                            ),
                           ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: const Color(0xFFE8E8E8),
+                          width: 0.5,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Preferencias de navegación',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF2C2C2A),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          SwitchListTile(
+                            title: const Text(
+                              'Cambiar a menú lateral',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Color(0xFF2C2C2A),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            value: usarMenuLateral,
+                            activeThumbColor: const Color(0xFF1D9E75),
+                            onChanged: (value) async {
+                              await nav_service.NavigationModeService.instance
+                                  .setMode(
+                                    value
+                                        ? nav_service.NavigationMode.drawer
+                                        : nav_service.NavigationMode.bottomNav,
+                                  );
+                              if (mounted) setState(() {});
+                            },
+                          ),
                         ],
                       ),
                     ),
@@ -193,16 +256,21 @@ class _ProfilePageState extends State<ProfilePage>
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                            color: const Color(0xFFE8E8E8), width: 0.5),
+                          color: const Color(0xFFE8E8E8),
+                          width: 0.5,
+                        ),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Mi actividad',
-                              style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF2C2C2A))),
+                          const Text(
+                            'Mi actividad',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF2C2C2A),
+                            ),
+                          ),
                           const SizedBox(height: 16),
                           Row(
                             children: [
@@ -238,15 +306,17 @@ class _ProfilePageState extends State<ProfilePage>
                       child: OutlinedButton.icon(
                         onPressed: _cerrarSesion,
                         style: OutlinedButton.styleFrom(
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
                           side: const BorderSide(color: Colors.red),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                         icon: const Icon(Icons.logout, color: Colors.red),
-                        label: const Text('Cerrar sesión',
-                            style: TextStyle(color: Colors.red)),
+                        label: const Text(
+                          'Cerrar sesión',
+                          style: TextStyle(color: Colors.red),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -266,15 +336,19 @@ class _ProfilePageState extends State<ProfilePage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label,
-                  style:
-                      TextStyle(fontSize: 11, color: Colors.grey[500])),
+              Text(
+                label,
+                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+              ),
               const SizedBox(height: 2),
-              Text(value,
-                  style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF2C2C2A))),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF2C2C2A),
+                ),
+              ),
             ],
           ),
         ),
@@ -282,8 +356,13 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  Widget _buildStatCard(IconData icon, String valor, String label,
-      Color bg, Color color) {
+  Widget _buildStatCard(
+    IconData icon,
+    String valor,
+    String label,
+    Color bg,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -294,15 +373,19 @@ class _ProfilePageState extends State<ProfilePage>
         children: [
           Icon(icon, color: color, size: 22),
           const SizedBox(height: 6),
-          Text(valor,
-              style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: color)),
+          Text(
+            valor,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
           const SizedBox(height: 2),
-          Text(label,
-              style: TextStyle(
-                  fontSize: 11, color: color.withOpacity(0.8))),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: color.withOpacity(0.8)),
+          ),
         ],
       ),
     );

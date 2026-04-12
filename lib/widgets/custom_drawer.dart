@@ -45,9 +45,7 @@ class CustomDrawer extends StatelessWidget {
             title: const Text('Buscar Precios'),
             onTap: () {
               Navigator.pop(context); // Close drawer
-              context.push(
-                '/search',
-              ); // push because it can be a sub-view, or go if flat
+              context.push('/search');
             },
           ),
           ListTile(
@@ -72,7 +70,7 @@ class CustomDrawer extends StatelessWidget {
             title: const Text('Perfil'),
             onTap: () {
               Navigator.pop(context); // Close drawer
-              context.push('/profile');
+              context.go('/profile');
             },
           ),
         ],
