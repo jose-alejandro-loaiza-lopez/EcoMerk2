@@ -22,7 +22,7 @@ Future<void> main() async {
     kPriceCheckTask,
     kPriceCheckTask,
     frequency: kPriceCheckFrequency,
-    existingWorkPolicy: ExistingWorkPolicy.keep,
+    existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
     constraints: Constraints(networkType: NetworkType.connected),
   );
 
