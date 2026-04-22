@@ -312,7 +312,7 @@ class _HomePageState extends State<HomePage>
                               children: [
                                 Text(
                                   oferta['emoji'],
-                                  style: const TextStyle(fontSize: 30),
+                                  style: const TextStyle(fontSize: 26),
                                 ),
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -325,7 +325,7 @@ class _HomePageState extends State<HomePage>
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                                    const SizedBox(height: 3),
+                                    const SizedBox(height: 2),
                                     Text(
                                       oferta['subtitulo'],
                                       style: const TextStyle(
@@ -333,7 +333,7 @@ class _HomePageState extends State<HomePage>
                                         fontSize: 11,
                                       ),
                                     ),
-                                    const SizedBox(height: 8),
+                                    const SizedBox(height: 6),
                                     Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 10,

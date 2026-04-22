@@ -1,16 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:workmanager/workmanager.dart';
 import 'package:ecomerk2/data/services/navigation_mode_service.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
 import 'package:ecomerk2/data/services/security_manager.dart';
+import 'package:ecomerk2/data/services/notification_service.dart';
+import 'package:ecomerk2/core/workers/price_check_worker.dart';
 import 'routes/app_routes.dart';
 import 'themes/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NavigationModeService.instance.load();
+
+  // Inicializar notificaciones locales
+  await NotificationService.instance.init();
+
+  // Registrar tarea periódica de verificación de precios en background
+  await Workmanager().initialize(priceCheckCallback, isInDebugMode: false);
+  await Workmanager().registerPeriodicTask(
+    kPriceCheckTask,
+    kPriceCheckTask,
+    frequency: kPriceCheckFrequency,
+    existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
+    constraints: Constraints(networkType: NetworkType.connected),
+  );
+
   runApp(const MyApp());
 }
+
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});

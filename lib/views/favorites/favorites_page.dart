@@ -4,6 +4,7 @@ import 'package:ecomerk2/data/services/navigation_mode_service.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
 import 'package:ecomerk2/data/services/market_api_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'widgets/price_alert_button.dart';
 
 class FavoritesPage extends StatefulWidget {
   const FavoritesPage({super.key});
@@ -376,8 +377,24 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                               ),
                                             ),
                                             // Botones de acción
+                                            // ── Botón alerta de precio ──
+                                            PriceAlertButton(
+                                              nombreProducto: nombreProducto,
+                                              precioReferencia: isMap &&
+                                                      item['precio'] != null &&
+                                                      item['precio'] != r'$0'
+                                                  ? double.tryParse(
+                                                      item['precio']
+                                                          .toString()
+                                                          .replaceAll(r'$', '')
+                                                          .replaceAll('.', '')
+                                                          .trim(),
+                                                    )
+                                                  : null,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            // ── Botón comparar ──
                                             if (!buscando) ...[
-                                              // Botón comparar
                                               GestureDetector(
                                                 onTap: () => precios != null
                                                     ? setState(() {
