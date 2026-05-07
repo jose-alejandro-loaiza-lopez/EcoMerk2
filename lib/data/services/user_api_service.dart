@@ -1,77 +1,86 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'security_manager.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'storage_service.dart';
 
+/// Servicio de acceso a la API de usuarios.
+///
+/// El almacenamiento de sesión está completamente delegado a [StorageService]:
+/// - Token JWT → [FlutterSecureStorage] (cifrado, solo desde StorageService).
+/// - Nombre, email, userId → [SharedPreferences] (desde StorageService).
 class ApiService {
   static const String baseUrl =
       'https://usuarios-bd-production.up.railway.app/api/v1';
 
-  static http.Client get _client {
-    return SecurityManager().client ?? http.Client();
-  }
+  static final _storage = StorageService();
 
-  static Future<void> guardarToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('jwt_token', token);
-    // Guardar timestamp de cuando se guardó el token
-    await prefs.setInt(
-      'token_timestamp',
-      DateTime.now().millisecondsSinceEpoch,
-    );
-  }
+  static http.Client get _client =>
+      SecurityManager().client ?? http.Client();
 
-  static Future<String?> obtenerToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('jwt_token');
-  }
+  // ══════════════════════════════════════════════════════════════════════════
+  // MÉTODOS DE STORAGE — delegan a StorageService
+  // ══════════════════════════════════════════════════════════════════════════
 
-  static Future<bool> tokenEstaVigente() async {
-    final prefs = await SharedPreferences.getInstance();
-    final timestamp = prefs.getInt('token_timestamp');
-    if (timestamp == null) return false;
-    final guardadoEn = DateTime.fromMillisecondsSinceEpoch(timestamp);
-    final diferencia = DateTime.now().difference(guardadoEn);
-    // Token válido por 23 horas (1 hora de margen antes de las 24h)
-    return diferencia.inHours < 23;
-  }
+  /// Recupera el JWT desde almacenamiento seguro.
+  static Future<String?> obtenerToken() => _storage.obtenerToken();
 
-  static Future<void> borrarToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('jwt_token');
-    await prefs.remove('usuario_id');
-    await prefs.remove('token_timestamp');
-    await prefs.remove('user_email');
-    await prefs.remove('user_password');
-  }
+  /// Verifica si el token almacenado está vigente (< 23h).
+  static Future<bool> tokenEstaVigente() => _storage.tokenEstaVigente();
 
-  static Future<void> guardarUserId(int id) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('usuario_id', id);
-  }
+  /// Elimina todos los datos de sesión de ambos storages.
+  static Future<void> borrarToken() => _storage.limpiarSesion();
 
-  static Future<int?> obtenerUserId() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt('usuario_id');
-  }
+  /// Recupera el ID de usuario desde SharedPreferences.
+  static Future<int?> obtenerUserId() => _storage.obtenerUserId();
 
-  static Future<void> guardarCredenciales(String email, String password) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user_email', email);
-    await prefs.setString('user_password', password);
-  }
+  // ══════════════════════════════════════════════════════════════════════════
+  // LOGIN (retrocompatibilidad con AuthCheck en main.dart)
+  // ══════════════════════════════════════════════════════════════════════════
 
-  static Future<Map<String, String>?> obtenerCredenciales() async {
-    final prefs = await SharedPreferences.getInstance();
-    final email = prefs.getString('user_email');
-    final password = prefs.getString('user_password');
-    if (email != null && password != null) {
-      return {'email': email, 'password': password};
+  /// Realiza login y persiste la sesión a través de [StorageService].
+  ///
+  /// Para el flujo con estados Loading/Success/Error, usar [LoginService].
+  static Future<Map<String, dynamic>> login({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final response = await _client.post(
+        Uri.parse('$baseUrl/usuarios/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email, 'password': password}),
+      );
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        final token      = body['token']   as String? ?? '';
+        final userId     = body['id']      as int?    ?? 0;
+        final usuarioObj = body['usuario'] as Map<String, dynamic>?;
+        final nombre     = usuarioObj?['nombre'] as String?
+                        ?? body['nombre']         as String?
+                        ?? '';
+        final emailResp  = usuarioObj?['email']  as String?
+                        ?? body['email']          as String?
+                        ?? email;
+
+        await _storage.guardarSesion(
+          token:     token,
+          nombre:    nombre,
+          email:     emailResp,
+          usuarioId: userId,
+        );
+        return {'exito': true};
+      } else {
+        return {'exito': false, 'mensaje': 'Correo o contraseña incorrectos'};
+      }
+    } catch (e) {
+      return {'exito': false, 'mensaje': 'No se pudo conectar al servidor'};
     }
-    return null;
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
   // REGISTRO
+  // ══════════════════════════════════════════════════════════════════════════
+
   static Future<Map<String, dynamic>> registrar({
     required String nombre,
     required String email,
@@ -103,32 +112,10 @@ class ApiService {
     }
   }
 
-  // LOGIN
-  static Future<Map<String, dynamic>> login({
-    required String email,
-    required String password,
-  }) async {
-    try {
-      final response = await _client.post(
-        Uri.parse('$baseUrl/usuarios/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password}),
-      );
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        await guardarToken(body['token']);
-        await guardarUserId(body['id']);
-        await guardarCredenciales(email, password);
-        return {'exito': true};
-      } else {
-        return {'exito': false, 'mensaje': 'Correo o contraseña incorrectos'};
-      }
-    } catch (e) {
-      return {'exito': false, 'mensaje': 'No se pudo conectar al servidor'};
-    }
-  }
+  // ══════════════════════════════════════════════════════════════════════════
+  // OBTENER USUARIO (con detección de token expirado)
+  // ══════════════════════════════════════════════════════════════════════════
 
-  // OBTENER USUARIO — con detección de token expirado
   static Future<Map<String, dynamic>?> obtenerUsuario(int id) async {
     try {
       final token = await obtenerToken();
@@ -143,7 +130,6 @@ class ApiService {
         final body = jsonDecode(response.body);
         return body['usuario'];
       }
-      // Token expirado o no autorizado
       if (response.statusCode == 401 || response.statusCode == 403) {
         return {'_tokenExpirado': true};
       }
@@ -153,7 +139,10 @@ class ApiService {
     }
   }
 
-  // ACTUALIZAR LISTA DE FAVORITOS
+  // ══════════════════════════════════════════════════════════════════════════
+  // ACTUALIZAR FAVORITOS
+  // ══════════════════════════════════════════════════════════════════════════
+
   static Future<bool> actualizarLista(int id, List<dynamic> lista) async {
     try {
       final token = await obtenerToken();
@@ -170,6 +159,10 @@ class ApiService {
       return false;
     }
   }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // BÚSQUEDA DE PRODUCTOS
+  // ══════════════════════════════════════════════════════════════════════════
 
   static Future<List<dynamic>?> buscarProductos(String query) async {
     final response = await _client.get(

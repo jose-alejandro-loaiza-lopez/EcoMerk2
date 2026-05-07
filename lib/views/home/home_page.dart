@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ecomerk2/data/services/navigation_mode_service.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
+import 'package:ecomerk2/data/services/storage_service.dart';
 import '../../widgets/custom_drawer.dart';
 
 class HomePage extends StatefulWidget {
@@ -178,7 +179,7 @@ class _HomePageState extends State<HomePage>
   }
 
   void _redirigirLogin({String? mensaje}) async {
-    await ApiService.borrarToken();
+    await StorageService().limpiarSesion();
     if (!mounted) return;
     if (mensaje != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -189,7 +190,7 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<void> _cerrarSesion() async {
-    await ApiService.borrarToken();
+    await StorageService().limpiarSesion();
     if (mounted) context.go('/login');
   }
 
