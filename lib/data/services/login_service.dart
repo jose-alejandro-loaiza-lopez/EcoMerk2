@@ -12,7 +12,7 @@ import 'user_api_service.dart';
 /// definidos en [AuthResult]: [AuthLoading] → [AuthSuccess] | [AuthError].
 ///
 /// En caso de éxito, delega el almacenamiento al [StorageService]:
-/// - `access_token` → [FlutterSecureStorage] (cifrado).
+/// - `access_token` y `refresh_token` → [FlutterSecureStorage] (cifrado).
 /// - `nombre`, `email`, `usuarioId` → [SharedPreferences].
 class LoginService {
   final _storage = StorageService();
@@ -46,8 +46,9 @@ class LoginService {
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body) as Map<String, dynamic>;
 
-        final token      = body['token']  as String? ?? '';
-        final usuarioId  = body['id']     as int?    ?? 0;
+        final token         = body['token']        as String? ?? '';
+        final refreshToken  = body['refreshToken']  as String? ?? '';
+        final usuarioId     = body['id']            as int?    ?? 0;
         // El backend puede devolver nombre y email dentro del objeto usuario
         final usuarioObj = body['usuario'] as Map<String, dynamic>?;
         final nombre     = usuarioObj?['nombre'] as String?
@@ -64,20 +65,22 @@ class LoginService {
 
         // 2. Persistir sesión de forma segmentada
         await _storage.guardarSesion(
-          token:     token,
-          nombre:    nombre,
-          email:     emailResp,
-          usuarioId: usuarioId,
+          token:        token,
+          refreshToken: refreshToken,
+          nombre:       nombre,
+          email:        emailResp,
+          usuarioId:    usuarioId,
         );
 
         debugPrint('LoginService: sesión guardada. userId=$usuarioId');
 
         // 3. Emitir éxito con los datos del usuario
         yield AuthSuccess(
-          token:     token,
-          nombre:    nombre,
-          email:     emailResp,
-          usuarioId: usuarioId,
+          token:        token,
+          refreshToken: refreshToken,
+          nombre:       nombre,
+          email:        emailResp,
+          usuarioId:    usuarioId,
         );
       } else {
         // Intentar obtener mensaje del backend

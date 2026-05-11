@@ -21,8 +21,11 @@ class ApiService {
   // MÉTODOS DE STORAGE — delegan a StorageService
   // ══════════════════════════════════════════════════════════════════════════
 
-  /// Recupera el JWT desde almacenamiento seguro.
+  /// Recupera el access token JWT desde almacenamiento seguro.
   static Future<String?> obtenerToken() => _storage.obtenerToken();
+
+  /// Recupera el refresh token desde almacenamiento seguro.
+  static Future<String?> obtenerRefreshToken() => _storage.obtenerRefreshToken();
 
   /// Verifica si el token almacenado está vigente (< 23h).
   static Future<bool> tokenEstaVigente() => _storage.tokenEstaVigente();
@@ -52,21 +55,23 @@ class ApiService {
       );
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body) as Map<String, dynamic>;
-        final token      = body['token']   as String? ?? '';
-        final userId     = body['id']      as int?    ?? 0;
-        final usuarioObj = body['usuario'] as Map<String, dynamic>?;
-        final nombre     = usuarioObj?['nombre'] as String?
-                        ?? body['nombre']         as String?
-                        ?? '';
-        final emailResp  = usuarioObj?['email']  as String?
-                        ?? body['email']          as String?
-                        ?? email;
+        final token        = body['token']        as String? ?? '';
+        final refreshToken = body['refreshToken']  as String? ?? '';
+        final userId       = body['id']            as int?    ?? 0;
+        final usuarioObj   = body['usuario'] as Map<String, dynamic>?;
+        final nombre       = usuarioObj?['nombre'] as String?
+                          ?? body['nombre']         as String?
+                          ?? '';
+        final emailResp    = usuarioObj?['email']  as String?
+                          ?? body['email']          as String?
+                          ?? email;
 
         await _storage.guardarSesion(
-          token:     token,
-          nombre:    nombre,
-          email:     emailResp,
-          usuarioId: userId,
+          token:        token,
+          refreshToken: refreshToken,
+          nombre:       nombre,
+          email:        emailResp,
+          usuarioId:    userId,
         );
         return {'exito': true};
       } else {
@@ -74,6 +79,46 @@ class ApiService {
       }
     } catch (e) {
       return {'exito': false, 'mensaje': 'No se pudo conectar al servidor'};
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // RENOVAR TOKENS (POST /auth/refresh)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /// Renueva el access token usando el refresh token almacenado.
+  ///
+  /// Llama a `POST /auth/refresh` con el refresh token actual;
+  /// si el servidor responde 200 guarda los nuevos tokens (rotación)
+  /// y devuelve `true`. Si falla, devuelve `false`.
+  static Future<bool> refreshTokens() async {
+    try {
+      final currentRefresh = await _storage.obtenerRefreshToken();
+      if (currentRefresh == null || currentRefresh.isEmpty) return false;
+
+      final response = await _client.post(
+        Uri.parse('$baseUrl/auth/refresh'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'refreshToken': currentRefresh}),
+      );
+
+      if (response.statusCode == 200) {
+        final body       = jsonDecode(response.body) as Map<String, dynamic>;
+        final newToken   = body['token']        as String? ?? '';
+        final newRefresh = body['refreshToken'] as String? ?? '';
+
+        if (newToken.isEmpty) return false;
+
+        // Persistir los nuevos tokens rotados (solo tokens, datos de usuario sin cambio)
+        await _storage.guardarNuevosTokens(
+          token:        newToken,
+          refreshToken: newRefresh,
+        );
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
     }
   }
 

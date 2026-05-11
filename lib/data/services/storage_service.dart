@@ -6,7 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// Aplica el principio de separación de sensibilidad:
 /// - Datos NO sensibles (nombre, email, userId, timestamp) →
 ///   [SharedPreferences]: persistencia estándar.
-/// - Datos SENSIBLES (access_token JWT) →
+/// - Datos SENSIBLES (access_token JWT, refresh_token) →
 ///   [FlutterSecureStorage]: cifrado en Keystore (Android) / Keychain (iOS).
 class StorageService {
   // ── Singleton ─────────────────────────────────────────────────────────────
@@ -20,11 +20,12 @@ class StorageService {
   );
 
   // ── Claves internas ───────────────────────────────────────────────────────
-  static const String _kToken     = 'access_token';   // SecureStorage
-  static const String _kNombre    = 'user_nombre';    // SharedPreferences
-  static const String _kEmail     = 'user_email';     // SharedPreferences
-  static const String _kUserId    = 'usuario_id';     // SharedPreferences
-  static const String _kTimestamp = 'token_timestamp'; // SharedPreferences
+  static const String _kToken        = 'access_token';    // SecureStorage
+  static const String _kRefreshToken = 'refresh_token';   // SecureStorage
+  static const String _kNombre       = 'user_nombre';     // SharedPreferences
+  static const String _kEmail        = 'user_email';      // SharedPreferences
+  static const String _kUserId       = 'usuario_id';      // SharedPreferences
+  static const String _kTimestamp    = 'token_timestamp'; // SharedPreferences
 
   // ══════════════════════════════════════════════════════════════════════════
   // GUARDAR SESIÓN COMPLETA
@@ -32,16 +33,18 @@ class StorageService {
 
   /// Persiste todos los datos de la sesión tras un login exitoso.
   ///
-  /// - [token] se guarda en [FlutterSecureStorage] (cifrado).
+  /// - [token] y [refreshToken] se guardan en [FlutterSecureStorage] (cifrado).
   /// - [nombre], [email], [usuarioId] y timestamp en [SharedPreferences].
   Future<void> guardarSesion({
     required String token,
+    required String refreshToken,
     required String nombre,
     required String email,
     required int usuarioId,
   }) async {
-    // Token JWT en almacenamiento seguro (cifrado)
+    // Tokens sensibles en almacenamiento seguro (cifrado)
     await _secureStorage.write(key: _kToken, value: token);
+    await _secureStorage.write(key: _kRefreshToken, value: refreshToken);
 
     // Datos no sensibles en SharedPreferences
     final prefs = await SharedPreferences.getInstance();
@@ -52,11 +55,33 @@ class StorageService {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // RENOVAR TOKENS (POST /auth/refresh)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /// Actualiza solo los tokens tras una rotación exitosa (`/auth/refresh`).
+  ///
+  /// No modifica datos no sensibles del usuario (nombre, email, userId).
+  Future<void> guardarNuevosTokens({
+    required String token,
+    required String refreshToken,
+  }) async {
+    await _secureStorage.write(key: _kToken, value: token);
+    await _secureStorage.write(key: _kRefreshToken, value: refreshToken);
+    // Actualizar timestamp para reiniciar el contador de vigencia
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kTimestamp, DateTime.now().millisecondsSinceEpoch);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // LECTURA
   // ══════════════════════════════════════════════════════════════════════════
 
-  /// Devuelve el JWT desde SecureStorage, o `null` si no existe.
+  /// Devuelve el access token JWT desde SecureStorage, o `null` si no existe.
   Future<String?> obtenerToken() => _secureStorage.read(key: _kToken);
+
+  /// Devuelve el refresh token desde SecureStorage, o `null` si no existe.
+  Future<String?> obtenerRefreshToken() =>
+      _secureStorage.read(key: _kRefreshToken);
 
   /// Devuelve el ID de usuario desde SharedPreferences.
   Future<int?> obtenerUserId() async {
@@ -97,8 +122,9 @@ class StorageService {
   ///
   /// Llamar siempre que el usuario cierre sesión o el token expire.
   Future<void> limpiarSesion() async {
-    // Token del almacenamiento seguro
+    // Tokens del almacenamiento seguro
     await _secureStorage.delete(key: _kToken);
+    await _secureStorage.delete(key: _kRefreshToken);
 
     // Datos no sensibles de SharedPreferences
     final prefs = await SharedPreferences.getInstance();

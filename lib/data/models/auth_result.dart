@@ -11,8 +11,11 @@ class AuthLoading extends AuthResult {}
 
 /// Login completado exitosamente.
 class AuthSuccess extends AuthResult {
-  /// Token JWT recibido del backend.
+  /// Access token JWT recibido del backend.
   final String token;
+
+  /// Refresh token recibido del backend (rotación; dura 7 días).
+  final String refreshToken;
 
   /// Nombre del usuario autenticado.
   final String nombre;
@@ -25,6 +28,7 @@ class AuthSuccess extends AuthResult {
 
   AuthSuccess({
     required this.token,
+    required this.refreshToken,
     required this.nombre,
     required this.email,
     required this.usuarioId,
