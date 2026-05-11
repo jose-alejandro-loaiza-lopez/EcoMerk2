@@ -9,41 +9,91 @@ class ChatPage extends StatefulWidget {
   State<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage> {
+class _ChatPageState extends State<ChatPage>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  
-  // Mensajes locales con id para el cursor de paginación
+  final FocusNode _focusNode = FocusNode();
+
   final List<Map<String, dynamic>> _mensajes = [];
   bool _cargando = false;
   bool _cargandoHistorial = true;
   bool _hayMas = false;
   int? _cursorAntes;
+  bool _mostrarMenuRapido = true;
 
-  final List<String> _sugerencias = [
-    '¿Qué puedo cocinar con arroz y pollo?',
-    '¿Cómo ahorro en mi mercado semanal?',
-    '¿Qué productos están más baratos en Éxito?',
-    'Dame una receta económica para 4 personas',
+  // Animación para "Escribiendo..."
+  late AnimationController _dotController;
+
+  final List<Map<String, dynamic>> _menuRapido = [
+    {
+      'icono': Icons.restaurant_menu_rounded,
+      'titulo': 'Recetas',
+      'subtitulo': 'Ideas para cocinar',
+      'mensaje': '¿Qué puedo cocinar con arroz y pollo?',
+      'color': const Color(0xFFE8F5E9),
+      'colorIcon': const Color(0xFF388E3C),
+    },
+    {
+      'icono': Icons.savings_rounded,
+      'titulo': 'Ahorrar',
+      'subtitulo': 'Consejos de ahorro',
+      'mensaje': '¿Cómo ahorro en mi mercado semanal?',
+      'color': const Color(0xFFE3F2FD),
+      'colorIcon': const Color(0xFF1976D2),
+    },
+    {
+      'icono': Icons.compare_arrows_rounded,
+      'titulo': 'Comparar',
+      'subtitulo': 'Precios entre tiendas',
+      'mensaje': '¿Qué productos están más baratos entre Éxito, Olímpica y Surtifamiliar?',
+      'color': const Color(0xFFFFF8E1),
+      'colorIcon': const Color(0xFFF9A825),
+    },
+    {
+      'icono': Icons.shopping_basket_rounded,
+      'titulo': 'Mercado',
+      'subtitulo': 'Lista económica',
+      'mensaje': 'Dame una receta económica para 4 personas',
+      'color': const Color(0xFFF3E5F5),
+      'colorIcon': const Color(0xFF7B1FA2),
+    },
+  ];
+
+  final List<String> _sugerenciasRapidas = [
+    '¿Precios en Éxito?',
+    '¿Precios en Olímpica?',
+    '¿Precios en Surtifamiliar?',
+    'Receta económica',
+    'Cómo ahorrar',
   ];
 
   @override
   void initState() {
     super.initState();
+    _dotController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
     _cargarHistorial();
   }
 
-  // Carga el historial desde el backend al abrir el chat
+  @override
+  void dispose() {
+    _dotController.dispose();
+    _controller.dispose();
+    _scrollController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
   Future<void> _cargarHistorial() async {
     setState(() => _cargandoHistorial = true);
-
     final data = await ChatApiService.obtenerMensajes();
 
     if (data != null && mounted) {
-      final mensajes = List<Map<String, dynamic>>.from(data['mensajes'] ?? []);
-      
-      // El servidor devuelve orden descendente (más reciente primero)
-      // Invertimos para mostrar cronológicamente
+      final mensajes =
+          List<Map<String, dynamic>>.from(data['mensajes'] ?? []);
       final mensajesOrdenados = mensajes.reversed.toList();
 
       setState(() {
@@ -57,9 +107,11 @@ class _ChatPageState extends State<ChatPage> {
         }
         _hayMas = data['hayMas'] == true;
         if (mensajes.isNotEmpty) {
-          _cursorAntes = mensajes.last['id']; // el de menor id para cargar más
+          _cursorAntes = mensajes.last['id'];
         }
         _cargandoHistorial = false;
+        // Si hay historial, ocultar menú rápido
+        if (_mensajes.isNotEmpty) _mostrarMenuRapido = false;
       });
 
       _scrollAbajo();
@@ -68,13 +120,12 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  // Cargar mensajes más antiguos (scroll hacia arriba)
   Future<void> _cargarMas() async {
     if (!_hayMas || _cursorAntes == null) return;
-
     final data = await ChatApiService.obtenerMensajes(antes: _cursorAntes);
     if (data != null && mounted) {
-      final mensajes = List<Map<String, dynamic>>.from(data['mensajes'] ?? []);
+      final mensajes =
+          List<Map<String, dynamic>>.from(data['mensajes'] ?? []);
       final mensajesOrdenados = mensajes.reversed.toList();
 
       setState(() {
@@ -94,20 +145,18 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _enviarMensaje(String texto) async {
-    if (texto.trim().isEmpty) return;
+    if (texto.trim().isEmpty || _cargando) return;
     _controller.clear();
+    _focusNode.unfocus();
 
-    // Agregar mensaje del usuario localmente
     setState(() {
       _mensajes.add({'rol': 'usuario', 'texto': texto});
       _cargando = true;
+      _mostrarMenuRapido = false;
     });
     _scrollAbajo();
 
-    // Guardar mensaje del usuario en el backend
     await ChatApiService.guardarMensaje(contenido: texto, esIa: false);
-
-    // Generar respuesta simulada
     await Future.delayed(const Duration(seconds: 1));
     final respuesta = _generarRespuestaSimulada(texto);
 
@@ -117,8 +166,6 @@ class _ChatPageState extends State<ChatPage> {
         _cargando = false;
       });
       _scrollAbajo();
-
-      // Guardar respuesta de la IA en el backend
       await ChatApiService.guardarMensaje(contenido: respuesta, esIa: true);
     }
   }
@@ -126,28 +173,45 @@ class _ChatPageState extends State<ChatPage> {
   String _generarRespuestaSimulada(String pregunta) {
     final p = pregunta.toLowerCase();
     if (p.contains('receta') || p.contains('cocinar') || p.contains('comer')) {
-      return '🍽️ ¡Claro! Con los productos de tu lista puedo sugerirte varias recetas económicas. '
+      return '🍽️ ¡Claro! Con los productos de tu lista puedo sugerirte varias recetas económicas.\n\n'
           'Por ejemplo, con arroz y pollo puedes hacer un delicioso arroz con pollo al estilo colombiano. '
-          'Solo necesitas: arroz, pollo, cebolla, ajo, tomate y especias. '
-          '¿Quieres que busque los precios de estos ingredientes en Éxito y Olímpica?';
+          'Solo necesitas: arroz, pollo, cebolla, ajo, tomate y especias.\n\n'
+          '¿Quieres que busque los precios de estos ingredientes en Éxito, Olímpica y Surtifamiliar?';
     }
     if (p.contains('ahorro') || p.contains('barato') || p.contains('precio')) {
       return '💰 Para ahorrar en tu mercado semanal te recomiendo:\n\n'
           '1. Compara precios usando el buscador de EcoMerca2\n'
           '2. Revisa tus favoritos para ver cuándo bajan de precio\n'
           '3. Compra granos y enlatados en mayor cantidad\n\n'
-          '¿Quieres que compare algún producto específico entre Éxito y Olímpica?';
+          '¿Quieres que compare algún producto específico entre Éxito, Olímpica y Surtifamiliar?';
     }
-    if (p.contains('éxito') || p.contains('olímpica') || p.contains('tienda')) {
-      return '🏪 Puedo ayudarte a comparar precios entre Éxito y Olímpica. '
-          'Usa el buscador de la app para ver en tiempo real cuál tienda tiene el precio más bajo. '
-          '¿Qué producto quieres comparar?';
+    if (p.contains('surtifamiliar')) {
+      return '🏪 Surtifamiliar es uno de los supermercados que comparamos en EcoMerca2. '
+          'Generalmente tiene buenos precios en granos, lácteos y productos de aseo.\n\n'
+          '¿Qué producto quieres comparar entre Éxito, Olímpica y Surtifamiliar?';
+    }
+    if (p.contains('éxito') || p.contains('exito')) {
+      return '🏪 Éxito es una de las tiendas disponibles en EcoMerca2. '
+          'Usa el buscador para comparar sus precios con Olímpica y Surtifamiliar en tiempo real.\n\n'
+          '¿Qué producto quieres buscar?';
+    }
+    if (p.contains('olímpica') || p.contains('olimpica')) {
+      return '🏪 Olímpica es una de las tiendas disponibles en EcoMerca2. '
+          'Puedes comparar sus precios con Éxito y Surtifamiliar usando el buscador.\n\n'
+          '¿Qué producto quieres buscar?';
+    }
+    if (p.contains('tienda') || p.contains('supermercado')) {
+      return '🏪 En EcoMerca2 comparamos precios entre 3 tiendas:\n\n'
+          '• Éxito\n'
+          '• Olímpica\n'
+          '• Surtifamiliar\n\n'
+          'Usa el buscador para ver en tiempo real cuál tiene el precio más bajo. ¿Qué producto quieres comparar?';
     }
     return '🤖 Entiendo tu consulta. Como asistente de EcoMerca2, puedo ayudarte con:\n\n'
-        '• Sugerencias de recetas basadas en tu lista\n'
+        '• Sugerencias de recetas económicas\n'
         '• Consejos para ahorrar en el mercado\n'
-        '• Comparación de precios entre Éxito y Olímpica\n\n'
-        '¿En qué más te ayudo?';
+        '• Comparación de precios entre Éxito, Olímpica y Surtifamiliar\n\n'
+        'Toca una de las opciones rápidas o escríbeme tu pregunta. ¿En qué más te ayudo?';
   }
 
   void _scrollAbajo() {
@@ -185,50 +249,58 @@ class _ChatPageState extends State<ChatPage> {
                 color: const Color(0xFF0F6E56),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(
-                Icons.auto_awesome_rounded,
-                color: Colors.white,
-                size: 20,
-              ),
+              child: const Icon(Icons.auto_awesome_rounded,
+                  color: Colors.white, size: 20),
             ),
             const SizedBox(width: 10),
-            const Column(
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const Text('Asistente IA',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600)),
                 Text(
-                  'Asistente IA',
+                  _cargando ? 'Escribiendo...' : 'EcoMerca2',
                   style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
+                    color: _cargando
+                        ? const Color(0xFFFFE082)
+                        : const Color(0xFF9FE1CB),
+                    fontSize: 11,
                   ),
-                ),
-                Text(
-                  'EcoMerca2',
-                  style: TextStyle(color: Color(0xFF9FE1CB), fontSize: 11),
                 ),
               ],
             ),
           ],
         ),
         actions: [
-          // Botón para cargar mensajes más antiguos
           if (_hayMas)
             IconButton(
               onPressed: _cargarMas,
               icon: const Icon(Icons.history, color: Colors.white),
               tooltip: 'Cargar mensajes anteriores',
             ),
+          IconButton(
+            onPressed: () =>
+                setState(() => _mostrarMenuRapido = !_mostrarMenuRapido),
+            icon: Icon(
+              _mostrarMenuRapido ? Icons.grid_off : Icons.grid_view_rounded,
+              color: Colors.white,
+            ),
+            tooltip: 'Menú rápido',
+          ),
         ],
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Column(
         children: [
-          // Estado de carga del historial
+          // Banner cargando historial
           if (_cargandoHistorial)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               color: const Color(0xFFE1F5EE),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -237,23 +309,65 @@ class _ChatPageState extends State<ChatPage> {
                     width: 14,
                     height: 14,
                     child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Color(0xFF1D9E75),
-                    ),
+                        strokeWidth: 2, color: Color(0xFF1D9E75)),
                   ),
                   SizedBox(width: 8),
-                  Text(
-                    'Cargando historial...',
+                  Text('Cargando historial...',
+                      style: TextStyle(
+                          color: Color(0xFF0F6E56), fontSize: 12)),
+                ],
+              ),
+            ),
+
+          // Banner "Escribiendo..." visible
+          if (_cargando)
+            Container(
+              width: double.infinity,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: const Color(0xFFFFF8E1),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  AnimatedBuilder(
+                    animation: _dotController,
+                    builder: (context, child) {
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: List.generate(3, (i) {
+                          final delay = i / 3;
+                          final value = (_dotController.value - delay)
+                              .clamp(0.0, 1.0);
+                          return Container(
+                            width: 6,
+                            height: 6,
+                            margin: const EdgeInsets.symmetric(horizontal: 2),
+                            decoration: BoxDecoration(
+                              color: Color.lerp(
+                                const Color(0xFFFFCC02),
+                                const Color(0xFFF9A825),
+                                value,
+                              ),
+                              shape: BoxShape.circle,
+                            ),
+                          );
+                        }),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'El asistente está escribiendo...',
                     style: TextStyle(
-                      color: Color(0xFF0F6E56),
-                      fontSize: 12,
-                    ),
+                        color: Color(0xFFF57F17),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500),
                   ),
                 ],
               ),
             ),
 
-          // Botón para cargar más mensajes antiguos
+          // Cargar más
           if (_hayMas && !_cargandoHistorial)
             GestureDetector(
               onTap: _cargarMas,
@@ -267,57 +381,100 @@ class _ChatPageState extends State<ChatPage> {
                     Icon(Icons.keyboard_arrow_up,
                         color: Color(0xFF1D9E75), size: 16),
                     SizedBox(width: 4),
-                    Text(
-                      'Cargar mensajes anteriores',
-                      style: TextStyle(
-                        color: Color(0xFF1D9E75),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    Text('Cargar mensajes anteriores',
+                        style: TextStyle(
+                            color: Color(0xFF1D9E75),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500)),
                   ],
                 ),
               ),
             ),
 
+          // Contenido principal
           Expanded(
             child: _cargandoHistorial
                 ? const Center(
                     child: CircularProgressIndicator(
-                      color: Color(0xFF1D9E75),
-                    ),
-                  )
-                : _mensajes.isEmpty
-                    ? _buildEstadoInicial()
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _mensajes.length + (_cargando ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (index == _mensajes.length && _cargando) {
-                            return _buildBurbujaCargando();
-                          }
-                          return _buildBurbuja(_mensajes[index]);
-                        },
-                      ),
+                        color: Color(0xFF1D9E75)))
+                : _mensajes.isEmpty && _mostrarMenuRapido
+                    ? _buildMenuInicial()
+                    : _mensajes.isEmpty
+                        ? _buildEstadoInicial()
+                        : ListView.builder(
+                            controller: _scrollController,
+                            padding: const EdgeInsets.all(16),
+                            itemCount:
+                                _mensajes.length + (_cargando ? 1 : 0),
+                            itemBuilder: (context, index) {
+                              if (index == _mensajes.length && _cargando) {
+                                return _buildBurbujaCargando();
+                              }
+                              return _buildBurbuja(_mensajes[index]);
+                            },
+                          ),
           ),
 
-          // Input de mensaje
+          // Sugerencias rápidas encima del input
+          if (!_cargando && _mensajes.isNotEmpty)
+            Container(
+              color: Colors.white,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _sugerenciasRapidas.map((s) {
+                    return GestureDetector(
+                      onTap: () => _enviarMensaje(s),
+                      child: Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE1F5EE),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: const Color(0xFF1D9E75).withOpacity(0.3)),
+                        ),
+                        child: Text(s,
+                            style: const TextStyle(
+                                color: Color(0xFF0F6E56),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500)),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+
+          // Input
           Container(
             color: Colors.white,
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _controller,
+                    focusNode: _focusNode,
                     maxLines: null,
+                    // Campo bloqueado mientras carga
+                    enabled: !_cargando,
                     decoration: InputDecoration(
-                      hintText: 'Pregúntame sobre recetas o precios...',
-                      hintStyle:
-                          TextStyle(color: Colors.grey[400], fontSize: 14),
+                      hintText: _cargando
+                          ? 'Espera la respuesta...'
+                          : 'Pregúntame sobre recetas o precios...',
+                      hintStyle: TextStyle(
+                          color: _cargando
+                              ? Colors.orange[200]
+                              : Colors.grey[400],
+                          fontSize: 14),
                       filled: true,
-                      fillColor: const Color(0xFFF5F5F5),
+                      fillColor: _cargando
+                          ? const Color(0xFFFFF8E1)
+                          : const Color(0xFFF5F5F5),
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 12),
                       border: OutlineInputBorder(
@@ -325,13 +482,16 @@ class _ChatPageState extends State<ChatPage> {
                         borderSide: BorderSide.none,
                       ),
                     ),
-                    onSubmitted: _enviarMensaje,
+                    onSubmitted: _cargando ? null : _enviarMensaje,
                   ),
                 ),
                 const SizedBox(width: 8),
                 GestureDetector(
-                  onTap: () => _enviarMensaje(_controller.text),
-                  child: Container(
+                  onTap: _cargando
+                      ? null
+                      : () => _enviarMensaje(_controller.text),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
                     width: 46,
                     height: 46,
                     decoration: BoxDecoration(
@@ -341,7 +501,9 @@ class _ChatPageState extends State<ChatPage> {
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Icon(
-                      Icons.send_rounded,
+                      _cargando
+                          ? Icons.hourglass_top_rounded
+                          : Icons.send_rounded,
                       color: _cargando ? Colors.grey : Colors.white,
                       size: 20,
                     ),
@@ -351,6 +513,143 @@ class _ChatPageState extends State<ChatPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // Menú inicial con tarjetas interactivas
+  Widget _buildMenuInicial() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE1F5EE),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Icon(Icons.auto_awesome_rounded,
+                color: Color(0xFF1D9E75), size: 36),
+          ),
+          const SizedBox(height: 16),
+          const Text('¿En qué te ayudo hoy?',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF2C2C2A))),
+          const SizedBox(height: 6),
+          Text(
+            'Comparo precios entre Éxito, Olímpica y Surtifamiliar',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey[500], fontSize: 13),
+          ),
+          const SizedBox(height: 24),
+
+          // Tarjetas de menú 2x2
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 1.3,
+            children: _menuRapido.map((item) {
+              return GestureDetector(
+                onTap: () => _enviarMensaje(item['mensaje']),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: item['color'] as Color,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: (item['colorIcon'] as Color).withOpacity(0.2),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Icon(item['icono'] as IconData,
+                          color: item['colorIcon'] as Color, size: 26),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item['titulo'],
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: item['colorIcon'] as Color)),
+                          Text(item['subtitulo'],
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: (item['colorIcon'] as Color)
+                                      .withOpacity(0.7))),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 16),
+
+          // Tiendas disponibles
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE8E8E8), width: 0.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Tiendas disponibles',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF2C2C2A))),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildTiendaChip('🛒', 'Éxito'),
+                    _buildTiendaChip('🏪', 'Olímpica'),
+                    _buildTiendaChip('🏬', 'Surtifamiliar'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTiendaChip(String emoji, String nombre) {
+    return GestureDetector(
+      onTap: () => _enviarMensaje('¿Qué productos están más baratos en $nombre?'),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE1F5EE),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 20)),
+            const SizedBox(height: 4),
+            Text(nombre,
+                style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF0F6E56))),
+          ],
+        ),
       ),
     );
   }
@@ -368,57 +667,20 @@ class _ChatPageState extends State<ChatPage> {
               color: const Color(0xFFE1F5EE),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Icon(
-              Icons.auto_awesome_rounded,
-              color: Color(0xFF1D9E75),
-              size: 36,
-            ),
+            child: const Icon(Icons.auto_awesome_rounded,
+                color: Color(0xFF1D9E75), size: 36),
           ),
           const SizedBox(height: 16),
-          const Text(
-            '¿En qué te ayudo hoy?',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF2C2C2A),
-            ),
-          ),
+          const Text('¿En qué te ayudo hoy?',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF2C2C2A))),
           const SizedBox(height: 8),
           Text(
-            'Pregúntame sobre recetas, precios o cómo ahorrar en tu mercado',
+            'Comparo precios entre Éxito, Olímpica y Surtifamiliar',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.grey[500], fontSize: 13),
-          ),
-          const SizedBox(height: 24),
-          ..._sugerencias.map(
-            (s) => GestureDetector(
-              onTap: () => _enviarMensaje(s),
-              child: Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                      color: const Color(0xFFE8E8E8), width: 0.5),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.auto_awesome_rounded,
-                        color: Color(0xFF1D9E75), size: 16),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(s,
-                          style: const TextStyle(
-                              fontSize: 13, color: Color(0xFF2C2C2A))),
-                    ),
-                    const Icon(Icons.chevron_right,
-                        color: Colors.grey, size: 16),
-                  ],
-                ),
-              ),
-            ),
           ),
         ],
       ),
@@ -449,12 +711,10 @@ class _ChatPageState extends State<ChatPage> {
           ],
           Flexible(
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: esUsuario
-                    ? const Color(0xFF1D9E75)
-                    : Colors.white,
+                color:
+                    esUsuario ? const Color(0xFF1D9E75) : Colors.white,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
@@ -472,9 +732,7 @@ class _ChatPageState extends State<ChatPage> {
               child: Text(
                 msg['texto'] ?? '',
                 style: TextStyle(
-                  color: esUsuario
-                      ? Colors.white
-                      : const Color(0xFF2C2C2A),
+                  color: esUsuario ? Colors.white : const Color(0xFF2C2C2A),
                   fontSize: 14,
                 ),
               ),
@@ -503,46 +761,41 @@ class _ChatPageState extends State<ChatPage> {
           ),
           const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 16, vertical: 12),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildPuntoAnimado(0),
-                const SizedBox(width: 4),
-                _buildPuntoAnimado(1),
-                const SizedBox(width: 4),
-                _buildPuntoAnimado(2),
-              ],
+            child: AnimatedBuilder(
+              animation: _dotController,
+              builder: (context, child) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(3, (i) {
+                    final delay = i / 3;
+                    final value =
+                        ((_dotController.value - delay) % 1.0).abs();
+                    return Container(
+                      width: 7,
+                      height: 7,
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      decoration: BoxDecoration(
+                        color: Color.lerp(
+                          Colors.grey[300],
+                          const Color(0xFF1D9E75),
+                          value < 0.5 ? value * 2 : (1 - value) * 2,
+                        ),
+                        shape: BoxShape.circle,
+                      ),
+                    );
+                  }),
+                );
+              },
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildPuntoAnimado(int index) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: Duration(milliseconds: 600 + (index * 200)),
-      builder: (context, value, child) {
-        return Container(
-          width: 7,
-          height: 7,
-          decoration: BoxDecoration(
-            color: Color.lerp(
-              Colors.grey[300],
-              const Color(0xFF1D9E75),
-              value,
-            ),
-            shape: BoxShape.circle,
-          ),
-        );
-      },
     );
   }
 }
