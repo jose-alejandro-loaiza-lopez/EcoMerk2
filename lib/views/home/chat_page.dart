@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ecomerk2/data/services/navigation_mode_service.dart';
+import 'package:ecomerk2/data/services/chat_api_service.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -11,8 +12,13 @@ class ChatPage extends StatefulWidget {
 class _ChatPageState extends State<ChatPage> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final List<Map<String, String>> _mensajes = [];
+  
+  // Mensajes locales con id para el cursor de paginación
+  final List<Map<String, dynamic>> _mensajes = [];
   bool _cargando = false;
+  bool _cargandoHistorial = true;
+  bool _hayMas = false;
+  int? _cursorAntes;
 
   final List<String> _sugerencias = [
     '¿Qué puedo cocinar con arroz y pollo?',
@@ -21,16 +27,87 @@ class _ChatPageState extends State<ChatPage> {
     'Dame una receta económica para 4 personas',
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    _cargarHistorial();
+  }
+
+  // Carga el historial desde el backend al abrir el chat
+  Future<void> _cargarHistorial() async {
+    setState(() => _cargandoHistorial = true);
+
+    final data = await ChatApiService.obtenerMensajes();
+
+    if (data != null && mounted) {
+      final mensajes = List<Map<String, dynamic>>.from(data['mensajes'] ?? []);
+      
+      // El servidor devuelve orden descendente (más reciente primero)
+      // Invertimos para mostrar cronológicamente
+      final mensajesOrdenados = mensajes.reversed.toList();
+
+      setState(() {
+        _mensajes.clear();
+        for (final m in mensajesOrdenados) {
+          _mensajes.add({
+            'id': m['id'],
+            'rol': m['esIa'] == true ? 'ia' : 'usuario',
+            'texto': m['contenido'],
+          });
+        }
+        _hayMas = data['hayMas'] == true;
+        if (mensajes.isNotEmpty) {
+          _cursorAntes = mensajes.last['id']; // el de menor id para cargar más
+        }
+        _cargandoHistorial = false;
+      });
+
+      _scrollAbajo();
+    } else {
+      if (mounted) setState(() => _cargandoHistorial = false);
+    }
+  }
+
+  // Cargar mensajes más antiguos (scroll hacia arriba)
+  Future<void> _cargarMas() async {
+    if (!_hayMas || _cursorAntes == null) return;
+
+    final data = await ChatApiService.obtenerMensajes(antes: _cursorAntes);
+    if (data != null && mounted) {
+      final mensajes = List<Map<String, dynamic>>.from(data['mensajes'] ?? []);
+      final mensajesOrdenados = mensajes.reversed.toList();
+
+      setState(() {
+        for (final m in mensajesOrdenados) {
+          _mensajes.insert(0, {
+            'id': m['id'],
+            'rol': m['esIa'] == true ? 'ia' : 'usuario',
+            'texto': m['contenido'],
+          });
+        }
+        _hayMas = data['hayMas'] == true;
+        if (mensajes.isNotEmpty) {
+          _cursorAntes = mensajes.last['id'];
+        }
+      });
+    }
+  }
+
   Future<void> _enviarMensaje(String texto) async {
     if (texto.trim().isEmpty) return;
     _controller.clear();
 
+    // Agregar mensaje del usuario localmente
     setState(() {
       _mensajes.add({'rol': 'usuario', 'texto': texto});
       _cargando = true;
     });
-
     _scrollAbajo();
+
+    // Guardar mensaje del usuario en el backend
+    await ChatApiService.guardarMensaje(contenido: texto, esIa: false);
+
+    // Generar respuesta simulada
     await Future.delayed(const Duration(seconds: 1));
     final respuesta = _generarRespuestaSimulada(texto);
 
@@ -40,6 +117,9 @@ class _ChatPageState extends State<ChatPage> {
         _cargando = false;
       });
       _scrollAbajo();
+
+      // Guardar respuesta de la IA en el backend
+      await ChatApiService.guardarMensaje(contenido: respuesta, esIa: true);
     }
   }
 
@@ -49,28 +129,25 @@ class _ChatPageState extends State<ChatPage> {
       return '🍽️ ¡Claro! Con los productos de tu lista puedo sugerirte varias recetas económicas. '
           'Por ejemplo, con arroz y pollo puedes hacer un delicioso arroz con pollo al estilo colombiano. '
           'Solo necesitas: arroz, pollo, cebolla, ajo, tomate y especias. '
-          '¿Quieres que busque los precios de estos ingredientes en Éxito, Olímpica y Surtifamiliar?';
+          '¿Quieres que busque los precios de estos ingredientes en Éxito y Olímpica?';
     }
     if (p.contains('ahorro') || p.contains('barato') || p.contains('precio')) {
       return '💰 Para ahorrar en tu mercado semanal te recomiendo:\n\n'
           '1. Compara precios usando el buscador de EcoMerca2\n'
           '2. Revisa tus favoritos para ver cuándo bajan de precio\n'
           '3. Compra granos y enlatados en mayor cantidad\n\n'
-          '¿Quieres que compare algún producto específico entre Éxito, Olímpica y Surtifamiliar?';
+          '¿Quieres que compare algún producto específico entre Éxito y Olímpica?';
     }
-    if (p.contains('éxito') ||
-        p.contains('olímpica') ||
-        p.contains('surtifamiliar') ||
-        p.contains('tienda')) {
-      return '🏪 Puedo ayudarte a comparar precios entre Éxito, Olímpica y Surtifamiliar. '
+    if (p.contains('éxito') || p.contains('olímpica') || p.contains('tienda')) {
+      return '🏪 Puedo ayudarte a comparar precios entre Éxito y Olímpica. '
           'Usa el buscador de la app para ver en tiempo real cuál tienda tiene el precio más bajo. '
           '¿Qué producto quieres comparar?';
     }
     return '🤖 Entiendo tu consulta. Como asistente de EcoMerca2, puedo ayudarte con:\n\n'
         '• Sugerencias de recetas basadas en tu lista\n'
         '• Consejos para ahorrar en el mercado\n'
-        '• Comparación de precios entre Éxito, Olímpica y Surtifamiliar\n\n'
-        'Esta es una versión prototipo. Pronto tendré IA real integrada. ¿En qué más te ayudo?';
+        '• Comparación de precios entre Éxito y Olímpica\n\n'
+        '¿En qué más te ayudo?';
   }
 
   void _scrollAbajo() {
@@ -127,49 +204,105 @@ class _ChatPageState extends State<ChatPage> {
                   ),
                 ),
                 Text(
-                  'Prototipo — EcoMerca2',
+                  'EcoMerca2',
                   style: TextStyle(color: Color(0xFF9FE1CB), fontSize: 11),
                 ),
               ],
             ),
           ],
         ),
+        actions: [
+          // Botón para cargar mensajes más antiguos
+          if (_hayMas)
+            IconButton(
+              onPressed: _cargarMas,
+              icon: const Icon(Icons.history, color: Colors.white),
+              tooltip: 'Cargar mensajes anteriores',
+            ),
+        ],
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Column(
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: const Color(0xFFFFF3CD),
-            child: const Row(
-              children: [
-                Icon(Icons.info_outline, color: Color(0xFF856404), size: 16),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Prototipo de IA — Las respuestas son simuladas',
-                    style: TextStyle(color: Color(0xFF856404), fontSize: 12),
+          // Estado de carga del historial
+          if (_cargandoHistorial)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              color: const Color(0xFFE1F5EE),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF1D9E75),
+                    ),
                   ),
-                ),
-              ],
+                  SizedBox(width: 8),
+                  Text(
+                    'Cargando historial...',
+                    style: TextStyle(
+                      color: Color(0xFF0F6E56),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+
+          // Botón para cargar más mensajes antiguos
+          if (_hayMas && !_cargandoHistorial)
+            GestureDetector(
+              onTap: _cargarMas,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                color: const Color(0xFFE1F5EE),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.keyboard_arrow_up,
+                        color: Color(0xFF1D9E75), size: 16),
+                    SizedBox(width: 4),
+                    Text(
+                      'Cargar mensajes anteriores',
+                      style: TextStyle(
+                        color: Color(0xFF1D9E75),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           Expanded(
-            child: _mensajes.isEmpty
-                ? _buildEstadoInicial()
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _mensajes.length + (_cargando ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == _mensajes.length && _cargando) {
-                        return _buildBurbujaCargando();
-                      }
-                      return _buildBurbuja(_mensajes[index]);
-                    },
-                  ),
+            child: _cargandoHistorial
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF1D9E75),
+                    ),
+                  )
+                : _mensajes.isEmpty
+                    ? _buildEstadoInicial()
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _mensajes.length + (_cargando ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index == _mensajes.length && _cargando) {
+                            return _buildBurbujaCargando();
+                          }
+                          return _buildBurbuja(_mensajes[index]);
+                        },
+                      ),
           ),
+
+          // Input de mensaje
           Container(
             color: Colors.white,
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
@@ -181,16 +314,12 @@ class _ChatPageState extends State<ChatPage> {
                     maxLines: null,
                     decoration: InputDecoration(
                       hintText: 'Pregúntame sobre recetas o precios...',
-                      hintStyle: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 14,
-                      ),
+                      hintStyle:
+                          TextStyle(color: Colors.grey[400], fontSize: 14),
                       filled: true,
                       fillColor: const Color(0xFFF5F5F5),
                       contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
+                          horizontal: 16, vertical: 12),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
                         borderSide: BorderSide.none,
@@ -206,12 +335,14 @@ class _ChatPageState extends State<ChatPage> {
                     width: 46,
                     height: 46,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1D9E75),
+                      color: _cargando
+                          ? Colors.grey[300]
+                          : const Color(0xFF1D9E75),
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.send_rounded,
-                      color: Colors.white,
+                      color: _cargando ? Colors.grey : Colors.white,
                       size: 20,
                     ),
                   ),
@@ -270,32 +401,20 @@ class _ChatPageState extends State<ChatPage> {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: const Color(0xFFE8E8E8),
-                    width: 0.5,
-                  ),
+                      color: const Color(0xFFE8E8E8), width: 0.5),
                 ),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.auto_awesome_rounded,
-                      color: Color(0xFF1D9E75),
-                      size: 16,
-                    ),
+                    const Icon(Icons.auto_awesome_rounded,
+                        color: Color(0xFF1D9E75), size: 16),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(
-                        s,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF2C2C2A),
-                        ),
-                      ),
+                      child: Text(s,
+                          style: const TextStyle(
+                              fontSize: 13, color: Color(0xFF2C2C2A))),
                     ),
-                    const Icon(
-                      Icons.chevron_right,
-                      color: Colors.grey,
-                      size: 16,
-                    ),
+                    const Icon(Icons.chevron_right,
+                        color: Colors.grey, size: 16),
                   ],
                 ),
               ),
@@ -306,14 +425,13 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  Widget _buildBurbuja(Map<String, String> msg) {
+  Widget _buildBurbuja(Map<String, dynamic> msg) {
     final esUsuario = msg['rol'] == 'usuario';
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        mainAxisAlignment: esUsuario
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
+        mainAxisAlignment:
+            esUsuario ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!esUsuario) ...[
@@ -324,19 +442,19 @@ class _ChatPageState extends State<ChatPage> {
                 color: const Color(0xFF1D9E75),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(
-                Icons.auto_awesome_rounded,
-                color: Colors.white,
-                size: 16,
-              ),
+              child: const Icon(Icons.auto_awesome_rounded,
+                  color: Colors.white, size: 16),
             ),
             const SizedBox(width: 8),
           ],
           Flexible(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: esUsuario ? const Color(0xFF1D9E75) : Colors.white,
+                color: esUsuario
+                    ? const Color(0xFF1D9E75)
+                    : Colors.white,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
@@ -354,7 +472,9 @@ class _ChatPageState extends State<ChatPage> {
               child: Text(
                 msg['texto'] ?? '',
                 style: TextStyle(
-                  color: esUsuario ? Colors.white : const Color(0xFF2C2C2A),
+                  color: esUsuario
+                      ? Colors.white
+                      : const Color(0xFF2C2C2A),
                   fontSize: 14,
                 ),
               ),
@@ -378,15 +498,13 @@ class _ChatPageState extends State<ChatPage> {
               color: const Color(0xFF1D9E75),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(
-              Icons.auto_awesome_rounded,
-              color: Colors.white,
-              size: 16,
-            ),
+            child: const Icon(Icons.auto_awesome_rounded,
+                color: Colors.white, size: 16),
           ),
           const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
@@ -394,11 +512,11 @@ class _ChatPageState extends State<ChatPage> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildPunto(),
+                _buildPuntoAnimado(0),
                 const SizedBox(width: 4),
-                _buildPunto(),
+                _buildPuntoAnimado(1),
                 const SizedBox(width: 4),
-                _buildPunto(),
+                _buildPuntoAnimado(2),
               ],
             ),
           ),
@@ -407,14 +525,24 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  Widget _buildPunto() {
-    return Container(
-      width: 7,
-      height: 7,
-      decoration: BoxDecoration(
-        color: Colors.grey[300],
-        shape: BoxShape.circle,
-      ),
+  Widget _buildPuntoAnimado(int index) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: Duration(milliseconds: 600 + (index * 200)),
+      builder: (context, value, child) {
+        return Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            color: Color.lerp(
+              Colors.grey[300],
+              const Color(0xFF1D9E75),
+              value,
+            ),
+            shape: BoxShape.circle,
+          ),
+        );
+      },
     );
   }
 }

@@ -29,7 +29,6 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -63,7 +62,17 @@ class _AuthCheckState extends State<AuthCheck> {
     // Obtener nuevas llaves RSA/AES al iniciar
     await SecurityManager().refreshKeys();
 
-    // Intentar inicio de sesión automático para obtener token nuevo
+    // PASO 1: Intentar renovar con refreshToken (más seguro que guardar contraseña)
+    final refreshToken = await ApiService.obtenerRefreshToken();
+    if (refreshToken != null) {
+      final renovado = await ApiService.renovarToken();
+      if (renovado) {
+        if (mounted) context.go('/home');
+        return;
+      }
+    }
+
+    // PASO 2: Fallback — intentar login con credenciales guardadas
     final credenciales = await ApiService.obtenerCredenciales();
     if (credenciales != null &&
         credenciales['email'] != null &&
@@ -78,10 +87,9 @@ class _AuthCheckState extends State<AuthCheck> {
       }
     }
 
-    // Fallback: verificar si ya hay token almacenado
+    // PASO 3: Fallback final — verificar si hay token almacenado vigente
     final token = await ApiService.obtenerToken();
     final userId = await ApiService.obtenerUserId();
-
     if (token != null && userId != null) {
       if (mounted) context.go('/home');
     } else {
