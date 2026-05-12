@@ -206,17 +206,50 @@ class ApiService {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // BÚSQUEDA DE PRODUCTOS
+  // HELPERS PARA PAYLOAD DE FAVORITOS
   // ══════════════════════════════════════════════════════════════════════════
 
-  static Future<List<dynamic>?> buscarProductos(String query) async {
-    final response = await _client.get(
-      Uri.parse('$baseUrl/productos?search=$query'),
-      headers: {'Authorization': 'Bearer ${await obtenerToken()}'},
-    );
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    }
-    return [];
+  /// Construye un objeto `ProductoFavorito` con el formato requerido por el backend:
+  ///
+  /// ```json
+  /// { "productId": "<link>", "notificaciones": false }
+  /// ```
+  ///
+  /// [productId] — identificador único del producto (usa el link del producto).
+  /// [notificaciones] — si el usuario quiere recibir alertas de precio.
+  static Map<String, dynamic> buildFavoritoPayload(
+    String productId, {
+    bool notificaciones = false,
+  }) =>
+      {'productId': productId, 'notificaciones': notificaciones};
+
+  /// Convierte una lista de objetos favoritos del backend (o de la UI)
+  /// al formato `[{productId, notificaciones}]` requerido por PATCH.
+  ///
+  /// Acepta tanto el formato antiguo (con campo `link`) como el nuevo
+  /// (con campo `productId`) para compatibilidad durante la migración.
+  static List<Map<String, dynamic>> normalizarFavoritos(
+    List<dynamic> lista,
+  ) {
+    return lista.map((e) {
+      if (e is Map<String, dynamic>) {
+        // Formato nuevo: ya tiene productId
+        if (e.containsKey('productId')) {
+          return {
+            'productId': e['productId'].toString(),
+            'notificaciones': e['notificaciones'] as bool? ?? false,
+          };
+        }
+        // Formato antiguo (legacy): tiene link, nombre, etc.
+        final id = (e['link'] ?? e['nombre'] ?? '').toString();
+        return {
+          'productId': id,
+          'notificaciones': e['notificaciones'] as bool? ?? false,
+        };
+      }
+      // Si es un string crudo, usarlo como productId
+      return {'productId': e.toString(), 'notificaciones': false};
+    }).toList();
   }
+
 }

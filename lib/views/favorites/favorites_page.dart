@@ -88,9 +88,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
     }
   }
 
-  /// Extrae el link de un item de la lista (puede ser Map o String).
+  /// Extrae el link/productId de un item de la lista (puede ser Map o String).
+  /// Soporta tanto el formato nuevo (productId) como el legado (link, nombre).
   String _obtenerLink(dynamic item) {
-    if (item is Map) return (item['link'] ?? '').toString();
+    if (item is Map) {
+      return (item['productId'] ?? item['link'] ?? '').toString();
+    }
     return item.toString();
   }
 
@@ -110,7 +113,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
     });
 
     if (_userId != null) {
-      await ApiService.actualizarLista(_userId!, nuevaLista);
+      // Normalizar al formato {productId, notificaciones} antes de enviar
+      final payload = ApiService.normalizarFavoritos(nuevaLista);
+      await ApiService.actualizarLista(_userId!, payload);
     }
   }
 

@@ -43,12 +43,16 @@ class _SearchPageState extends State<SearchPage> {
             usuario['favoritos'] ?? usuario['alimentosFavoritos'] ?? [],
           );
           setState(() {
+            // Soporte para formato nuevo (productId) y formato antiguo (link/nombre)
             _enFavoritos = favs
-                .map(
-                  (f) => (f is Map
-                      ? (f['link'] ?? f['nombre']).toString()
-                      : f.toString()),
-                )
+                .map((f) {
+                  if (f is Map) {
+                    return (f['productId'] ?? f['link'] ?? f['nombre'] ?? '')
+                        .toString();
+                  }
+                  return f.toString();
+                })
+                .where((s) => s.isNotEmpty)
                 .toSet();
           });
         }
@@ -156,21 +160,19 @@ class _SearchPageState extends State<SearchPage> {
         return;
       }
 
-      List<dynamic> favoritosActuales = List.from(
+      // Normalizar la lista existente al formato {productId, notificaciones}
+      final rawFavs = List<dynamic>.from(
         usuario['favoritos'] ?? usuario['alimentosFavoritos'] ?? [],
       );
+      List<Map<String, dynamic>> favoritosActuales =
+          ApiService.normalizarFavoritos(rawFavs);
 
-      final itemLink = item['link'];
-      final itemNombre = item['nombre'];
+      // El productId es el link del producto
+      final String productId = (item['link'] ?? item['nombre'] ?? '').toString();
 
-      // Verificar si ya existe buscando por el link o nombre
-      int indexExiste = favoritosActuales.indexWhere((favorito) {
-        if (favorito is Map) {
-          return favorito['link'] == itemLink ||
-              favorito['nombre'] == itemNombre;
-        }
-        return favorito == itemNombre;
-      });
+      // Verificar si ya existe por productId
+      final indexExiste = favoritosActuales
+          .indexWhere((f) => f['productId'].toString() == productId);
 
       if (indexExiste != -1) {
         // Quitar de favoritos
@@ -180,8 +182,7 @@ class _SearchPageState extends State<SearchPage> {
         if (mounted) {
           if (exito) {
             setState(() {
-              _enFavoritos.remove(itemLink?.toString() ?? '');
-              _enFavoritos.remove(itemNombre?.toString() ?? '');
+              _enFavoritos.remove(productId);
             });
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Producto quitado de favoritos')),
@@ -193,24 +194,16 @@ class _SearchPageState extends State<SearchPage> {
           }
         }
       } else {
-        // Agregar a favoritos
-        final productoFavorito = {
-          "nombre": itemNombre,
-          "precio": "\$${_formatearPrecio(item['precio'] as double)}",
-          "tienda": item['tienda'],
-          "imagen": item['imagen'],
-          "link": itemLink,
-        };
-
-        favoritosActuales.add(productoFavorito);
+        // Agregar a favoritos con el payload correcto
+        favoritosActuales.add(
+          ApiService.buildFavoritoPayload(productId, notificaciones: false),
+        );
         final exito = await ApiService.actualizarLista(id, favoritosActuales);
 
         if (mounted) {
           if (exito) {
             setState(() {
-              _enFavoritos.add(
-                itemLink?.toString() ?? itemNombre?.toString() ?? '',
-              );
+              _enFavoritos.add(productId);
             });
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(

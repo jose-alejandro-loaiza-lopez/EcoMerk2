@@ -1,5 +1,5 @@
 
-**Base URL**: `http://usuarios-bd-production.up.railway.app:8080/api/v1`
+**Base URL**: `https://usuarios-bd-production.up.railway.app/api/v1`
 
 **Formato de autorización**: incluir header `Authorization: Bearer <ACCESS_TOKEN>` para endpoints que requieran autenticación.  
 - `ACCESS_TOKEN` = JWT (expiración por defecto: 1 día).  
@@ -50,9 +50,14 @@ Base: `/usuarios`
     - `email`, `password`
   - Response 200:
     - `token` (string) — access JWT
-    - `refreshToken` (string)
+    - `refreshToken` (string) — refresh token (texto plano) que debe guardarse en el cliente
     - `id` (number) — id del usuario
     - `mensaje` (string)
+  - Nota: El login devuelve tanto `token` como `refreshToken`. El cliente debe almacenar
+    el `refreshToken` de forma segura y, cuando el `access token` expire, llamar a
+    `POST /auth/refresh` con el `refreshToken` para recibir un nuevo `token` y un nuevo
+    `refreshToken` (rotación). El backend almacena sólo un hash del `refreshToken` y
+    revoca tokens anteriores para prevenir reutilización.
   - Ejemplo:
     ```bash
     curl -X POST http://localhost:8080/api/v1/usuarios/login \
@@ -104,7 +109,7 @@ Base: `/usuarios`
 - **PATCH /usuarios/{id}/favoritos** — Sincronizar favoritos (owner o admin)
   - Autenticación: SÍ (solo dueño o admin)
   - Request JSON: array de `ProductoFavorito` (estructura en backend):
-    - `link` (string) — URL o identificador del producto
+    - `productId` (string) — identificador del producto; ahora se usan ids en vez de enlaces
     - `notificaciones` (boolean) — si el usuario activó las notificaciones para ese producto
   - Response 200:
     - `usuario`: usuario con `favoritos` sincronizados
@@ -161,7 +166,41 @@ Base: `/chat`
       -d '{"contenido":"Hola IA, ¿qué debo hacer?","esIa":false}'
     ```
 
-**4) Formatos de respuesta de error (comunes)**
+**4) Productos (historial de precios)**  
+Base: `/productos`
+
+- **GET /productos/{productId}/precios** — Obtener historial de precios de un producto
+  - Autenticación: NO
+  - Path params:
+    - `productId` (string) — identificador del producto
+  - Response 200:
+    - `productId` (string)
+    - `historial` (array) — lista de objetos `PrecioHistorico` ordenada por `fechaGuardado` descendente:
+      - `id` (number)
+      - `productId` (string)
+      - `precio` (number)
+      - `fechaGuardado` (string, ISO 8601)
+  - Nota: si no hay precios, devuelve `historial: []`.
+  - Ejemplo:
+    ```bash
+    curl http://localhost:8080/api/v1/productos/12345/precios
+    ```
+
+- **POST /productos/{productId}/precios** — Agregar nuevo precio al historial
+  - Autenticación: NO
+  - Request JSON (`PrecioRequest`):
+    - `precio` (number) — obligatorio
+  - Response 201:
+    - `mensaje`: "Precio agregado correctamente"
+    - `precio`: objeto `PrecioHistorico` guardado (`id`, `productId`, `precio`, `fechaGuardado`)
+  - Ejemplo:
+    ```bash
+    curl -X POST http://localhost:8080/api/v1/productos/12345/precios \
+      -H "Content-Type: application/json" \
+      -d '{"precio": 123400.0}'
+    ```
+
+**5) Formatos de respuesta de error (comunes)**
 - `400 Bad Request` — validación de campos:
   ```json
   {
@@ -189,7 +228,7 @@ Base: `/chat`
   ```
 - `500 Internal Server Error` — errores generales (incluye mensajes de excepción).
 
-**5) Esquema de la tabla de mensajes (DDL sugerido)**
+**6) Esquema de la tabla de mensajes (DDL sugerido)**
 - Recomendado si la BD parte desde cero (Postgres):
   ```sql
   CREATE TABLE mensajes_chat (
@@ -200,7 +239,7 @@ Base: `/chat`
   );
   ```
 
-**6) Notas de seguridad / recomendaciones para frontend**
+**7) Notas de seguridad / recomendaciones para frontend**
 - Guardado de tokens:
   - `access token` (JWT): preferiblemente mantener en memoria y reenviar en `Authorization` header.
   - `refresh token`: idealmente en `HttpOnly`, `Secure` cookie (si backend lo soporta) para reducir riesgo XSS; si no, guardarlo en almacenamiento seguro del cliente con precaución.

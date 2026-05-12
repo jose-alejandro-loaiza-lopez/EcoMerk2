@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ecomerk2/data/services/navigation_mode_service.dart';
+import 'package:ecomerk2/data/services/chat_api_service.dart';
 
+/// Página de chat privado con la IA del usuario.
+///
+/// Integra los endpoints reales del backend:
+///   GET  /chat/mensajes[?antes=<id>] — cargar historial (10 por página)
+///   POST /chat/mensajes              — guardar mensajes (usuario e IA)
+///
+/// La respuesta de la IA se genera de forma local (simulada) y luego
+/// se persiste en el backend con `esIa: true`.
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
   @override
@@ -11,8 +20,16 @@ class ChatPage extends StatefulWidget {
 class _ChatPageState extends State<ChatPage> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final List<Map<String, String>> _mensajes = [];
+
+  /// Lista de mensajes en orden cronológico (el último es el más reciente).
+  final List<MensajeChat> _mensajes = [];
+
   bool _cargando = false;
+  bool _cargandoHistorial = false;
+  bool _hayMasHistorial = false;
+
+  /// ID del mensaje más antiguo cargado, para paginar hacia atrás.
+  int? _cursorAntes;
 
   final List<String> _sugerencias = [
     '¿Qué puedo cocinar con arroz y pollo?',
@@ -21,27 +38,136 @@ class _ChatPageState extends State<ChatPage> {
     'Dame una receta económica para 4 personas',
   ];
 
-  Future<void> _enviarMensaje(String texto) async {
-    if (texto.trim().isEmpty) return;
-    _controller.clear();
+  @override
+  void initState() {
+    super.initState();
+    _cargarHistorial(inicial: true);
+    _scrollController.addListener(_onScroll);
+  }
 
-    setState(() {
-      _mensajes.add({'rol': 'usuario', 'texto': texto});
-      _cargando = true;
-    });
+  @override
+  void dispose() {
+    _controller.dispose();
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
 
-    _scrollAbajo();
-    await Future.delayed(const Duration(seconds: 1));
-    final respuesta = _generarRespuestaSimulada(texto);
+  // ── Scroll infinito hacia arriba ───────────────────────────────────────────
 
-    if (mounted) {
-      setState(() {
-        _mensajes.add({'rol': 'ia', 'texto': respuesta});
-        _cargando = false;
-      });
-      _scrollAbajo();
+  void _onScroll() {
+    if (_scrollController.position.pixels <= 50 &&
+        _hayMasHistorial &&
+        !_cargandoHistorial) {
+      _cargarHistorial(inicial: false);
     }
   }
+
+  // ── Cargar historial desde el backend ─────────────────────────────────────
+
+  Future<void> _cargarHistorial({required bool inicial}) async {
+    if (_cargandoHistorial) return;
+    setState(() => _cargandoHistorial = true);
+
+    try {
+      final resultado = await ChatApiService.obtenerMensajes(
+        antes: inicial ? null : _cursorAntes,
+      );
+
+      if (resultado != null && mounted) {
+        // El backend devuelve los mensajes ordenados descendente (más reciente primero)
+        // Invertimos para mostrar el más antiguo arriba
+        final nuevos = resultado.mensajes.reversed.toList();
+
+        setState(() {
+          if (inicial) {
+            _mensajes.clear();
+          }
+          // Insertar al inicio (son mensajes más antiguos)
+          _mensajes.insertAll(0, nuevos);
+          _hayMasHistorial = resultado.hayMas;
+
+          if (nuevos.isNotEmpty) {
+            // El cursor apunta al id más pequeño cargado (el más antiguo)
+            _cursorAntes = _mensajes.first.id;
+          }
+        });
+
+        if (inicial) _scrollAbajo();
+      }
+    } catch (e) {
+      debugPrint('[ChatPage] Error cargando historial: $e');
+    } finally {
+      if (mounted) setState(() => _cargandoHistorial = false);
+    }
+  }
+
+  // ── Enviar mensaje ─────────────────────────────────────────────────────────
+
+  Future<void> _enviarMensaje(String texto) async {
+    final contenido = texto.trim();
+    if (contenido.isEmpty) return;
+    _controller.clear();
+
+    setState(() => _cargando = true);
+    _scrollAbajo();
+
+    try {
+      // 1. Guardar mensaje del usuario en el backend
+      final mensajeUsuario = await ChatApiService.guardarMensaje(
+        contenido: contenido,
+        esIa: false,
+      );
+
+      if (mensajeUsuario != null && mounted) {
+        setState(() => _mensajes.add(mensajeUsuario));
+        _scrollAbajo();
+      } else {
+        // Si falla el guardado, igual mostramos localmente
+        final fallback = MensajeChat(
+          id: DateTime.now().millisecondsSinceEpoch,
+          usuarioId: 0,
+          contenido: contenido,
+          esIa: false,
+        );
+        if (mounted) setState(() => _mensajes.add(fallback));
+        _scrollAbajo();
+      }
+
+      // 2. Generar respuesta de la IA (simulada)
+      await Future.delayed(const Duration(milliseconds: 800));
+      final respuesta = _generarRespuestaSimulada(contenido);
+
+      // 3. Guardar respuesta de la IA en el backend
+      final mensajeIa = await ChatApiService.guardarMensaje(
+        contenido: respuesta,
+        esIa: true,
+      );
+
+      if (mounted) {
+        setState(() {
+          _cargando = false;
+          if (mensajeIa != null) {
+            _mensajes.add(mensajeIa);
+          } else {
+            // Fallback local si el guardado falla
+            _mensajes.add(MensajeChat(
+              id: DateTime.now().millisecondsSinceEpoch + 1,
+              usuarioId: 0,
+              contenido: respuesta,
+              esIa: true,
+            ));
+          }
+        });
+        _scrollAbajo();
+      }
+    } catch (e) {
+      debugPrint('[ChatPage] Error enviando mensaje: $e');
+      if (mounted) setState(() => _cargando = false);
+    }
+  }
+
+  // ── Respuesta simulada (IA local) ──────────────────────────────────────────
 
   String _generarRespuestaSimulada(String pregunta) {
     final p = pregunta.toLowerCase();
@@ -70,7 +196,7 @@ class _ChatPageState extends State<ChatPage> {
         '• Sugerencias de recetas basadas en tu lista\n'
         '• Consejos para ahorrar en el mercado\n'
         '• Comparación de precios entre Éxito, Olímpica y Surtifamiliar\n\n'
-        'Esta es una versión prototipo. Pronto tendré IA real integrada. ¿En qué más te ayudo?';
+        '¿En qué más te ayudo?';
   }
 
   void _scrollAbajo() {
@@ -84,6 +210,8 @@ class _ChatPageState extends State<ChatPage> {
       }
     });
   }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -127,7 +255,7 @@ class _ChatPageState extends State<ChatPage> {
                   ),
                 ),
                 Text(
-                  'Prototipo — EcoMerca2',
+                  'EcoMerca2',
                   style: TextStyle(color: Color(0xFF9FE1CB), fontSize: 11),
                 ),
               ],
@@ -135,41 +263,68 @@ class _ChatPageState extends State<ChatPage> {
           ],
         ),
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          if (_hayMasHistorial)
+            TextButton(
+              onPressed: () => _cargarHistorial(inicial: false),
+              child: const Text(
+                'Ver más',
+                style: TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ),
+        ],
       ),
       body: Column(
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: const Color(0xFFFFF3CD),
-            child: const Row(
-              children: [
-                Icon(Icons.info_outline, color: Color(0xFF856404), size: 16),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Prototipo de IA — Las respuestas son simuladas',
-                    style: TextStyle(color: Color(0xFF856404), fontSize: 12),
-                  ),
-                ),
-              ],
+          // Indicador cargando historial
+          if (_cargandoHistorial && _mensajes.isEmpty)
+            const LinearProgressIndicator(
+              color: Color(0xFF1D9E75),
+              backgroundColor: Color(0xFFE1F5EE),
             ),
-          ),
+
+          // Cuerpo del chat
           Expanded(
-            child: _mensajes.isEmpty
+            child: (_mensajes.isEmpty && !_cargandoHistorial)
                 ? _buildEstadoInicial()
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.all(16),
-                    itemCount: _mensajes.length + (_cargando ? 1 : 0),
+                    itemCount: _mensajes.length +
+                        (_cargandoHistorial ? 1 : 0) +
+                        (_cargando ? 1 : 0),
                     itemBuilder: (context, index) {
-                      if (index == _mensajes.length && _cargando) {
+                      // Spinner de carga de historial al inicio
+                      if (_cargandoHistorial && index == 0) {
+                        return const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF1D9E75),
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                      final msgIndex =
+                          index - (_cargandoHistorial ? 1 : 0);
+                      // Spinner de respuesta IA al final
+                      if (_cargando && msgIndex == _mensajes.length) {
                         return _buildBurbujaCargando();
                       }
-                      return _buildBurbuja(_mensajes[index]);
+                      if (msgIndex < 0 || msgIndex >= _mensajes.length) {
+                        return const SizedBox.shrink();
+                      }
+                      return _buildBurbuja(_mensajes[msgIndex]);
                     },
                   ),
           ),
+
+          // Input
           Container(
             color: Colors.white,
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
@@ -179,6 +334,7 @@ class _ChatPageState extends State<ChatPage> {
                   child: TextField(
                     controller: _controller,
                     maxLines: null,
+                    enabled: !_cargando,
                     decoration: InputDecoration(
                       hintText: 'Pregúntame sobre recetas o precios...',
                       hintStyle: TextStyle(
@@ -201,12 +357,16 @@ class _ChatPageState extends State<ChatPage> {
                 ),
                 const SizedBox(width: 8),
                 GestureDetector(
-                  onTap: () => _enviarMensaje(_controller.text),
+                  onTap: _cargando
+                      ? null
+                      : () => _enviarMensaje(_controller.text),
                   child: Container(
                     width: 46,
                     height: 46,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1D9E75),
+                      color: _cargando
+                          ? Colors.grey
+                          : const Color(0xFF1D9E75),
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: const Icon(
@@ -306,14 +466,13 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  Widget _buildBurbuja(Map<String, String> msg) {
-    final esUsuario = msg['rol'] == 'usuario';
+  Widget _buildBurbuja(MensajeChat msg) {
+    final esUsuario = !msg.esIa;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        mainAxisAlignment: esUsuario
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
+        mainAxisAlignment:
+            esUsuario ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!esUsuario) ...[
@@ -334,7 +493,8 @@ class _ChatPageState extends State<ChatPage> {
           ],
           Flexible(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: esUsuario ? const Color(0xFF1D9E75) : Colors.white,
                 borderRadius: BorderRadius.only(
@@ -345,16 +505,17 @@ class _ChatPageState extends State<ChatPage> {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),
                 ],
               ),
               child: Text(
-                msg['texto'] ?? '',
+                msg.contenido,
                 style: TextStyle(
-                  color: esUsuario ? Colors.white : const Color(0xFF2C2C2A),
+                  color:
+                      esUsuario ? Colors.white : const Color(0xFF2C2C2A),
                   fontSize: 14,
                 ),
               ),
@@ -386,7 +547,8 @@ class _ChatPageState extends State<ChatPage> {
           ),
           const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),

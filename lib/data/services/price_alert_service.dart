@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'market_api_service.dart';
 import 'notification_service.dart';
+import 'producto_api_service.dart';
 
 /// Umbral mínimo de bajada de precio (en porcentaje) para disparar una alerta.
 const double kPriceAlertThresholdPct = 5.0;
@@ -95,6 +97,15 @@ class PriceAlertService {
         final tienda = (producto['tienda'] as String?) ?? '';
 
         if (precioActual <= 0 || precioReferencia <= 0) continue;
+
+        // Registrar el precio actual en el historial del backend
+        // (POST /productos/{productId}/precios — sin autenticación)
+        unawaited(
+          ProductoApiService.agregarPrecio(
+            productId: link,
+            precio: precioActual,
+          ),
+        );
 
         // Calculamos la variación porcentual
         final variacion =
