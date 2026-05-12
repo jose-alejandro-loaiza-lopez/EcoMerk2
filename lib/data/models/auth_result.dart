@@ -1,3 +1,4 @@
+
 /// Resultado sellado del proceso de autenticación JWT.
 ///
 /// Representa los tres estados posibles:
