@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../controllers/auth/login_controller.dart';
+import '../../data/models/auth_result.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -13,6 +14,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _loading = false;
   bool _obscurePassword = true;
 
+  /// Escucha el [Stream<AuthResult>] del controlador y reacciona a cada estado.
   Future<void> _handleLogin() async {
     if (_controller.emailController.text.isEmpty ||
         _controller.passwordController.text.isEmpty) {
@@ -22,19 +24,31 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
-    setState(() => _loading = true);
-    final result = await _controller.login();
-    setState(() => _loading = false);
+    await for (final estado in _controller.login()) {
+      if (!mounted) break;
 
-    if (result['exito']) {
-      context.go('/home');
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['mensaje']),
-          backgroundColor: Colors.red,
-        ),
-      );
+      switch (estado) {
+        case AuthLoading():
+          // Estado de carga: mostrar spinner
+          setState(() => _loading = true);
+
+        case AuthSuccess():
+          // Éxito: ocultar spinner y navegar al home
+          setState(() => _loading = false);
+          if (mounted) context.go('/home');
+
+        case AuthError():
+          // Error: ocultar spinner y mostrar mensaje
+          setState(() => _loading = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(estado.mensaje),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+      }
     }
   }
 
@@ -53,19 +67,24 @@ class _LoginPageState extends State<LoginPage> {
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
             children: [
-              const SizedBox(height: 60),              Center(
+              const SizedBox(height: 60),
+              Center(
                 child: Column(children: [
-                   const Text('🛒', style: TextStyle(fontSize: 48)),
+                  const Text('🛒', style: TextStyle(fontSize: 48)),
                   const SizedBox(height: 8),
-                  const Text('EcoMerca2',
+                  const Text(
+                    'EcoMerca2',
                     style: TextStyle(
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF0F6E56),
-                    )),
+                    ),
+                  ),
                   const SizedBox(height: 4),
-                  const Text('Ahorra inteligente cada semana',
-                    style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  const Text(
+                    'Ahorra inteligente cada semana',
+                    style: TextStyle(color: Colors.grey, fontSize: 13),
+                  ),
                 ]),
               ),
               const SizedBox(height: 40),
@@ -74,24 +93,28 @@ class _LoginPageState extends State<LoginPage> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black12, blurRadius: 10)
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black12, blurRadius: 10),
                   ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Iniciar sesión',
+                    const Text(
+                      'Iniciar sesión',
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w600,
-                      )),
+                      ),
+                    ),
                     const SizedBox(height: 20),
-                    const Text('Correo electrónico',
+                    const Text(
+                      'Correo electrónico',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                      )),
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     TextField(
                       controller: _controller.emailController,
@@ -99,17 +122,20 @@ class _LoginPageState extends State<LoginPage> {
                       decoration: InputDecoration(
                         hintText: 'tucorreo@gmail.com',
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                         filled: true,
                         fillColor: const Color(0xFFFAFAFA),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const Text('Contraseña',
+                    const Text(
+                      'Contraseña',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                      )),
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     TextField(
                       controller: _controller.passwordController,
@@ -117,15 +143,19 @@ class _LoginPageState extends State<LoginPage> {
                       decoration: InputDecoration(
                         hintText: '••••••••',
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                         filled: true,
                         fillColor: const Color(0xFFFAFAFA),
                         suffixIcon: IconButton(
-                          icon: Icon(_obscurePassword
-                            ? Icons.visibility_off
-                            : Icons.visibility),
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                          ),
                           onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword),
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                         ),
                       ),
                     ),
@@ -138,23 +168,26 @@ class _LoginPageState extends State<LoginPage> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF1D9E75),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                         child: _loading
-                          ? const CircularProgressIndicator(
-                              color: Colors.white)
-                          : const Text('Ingresar',
-                              style: TextStyle(
-                                fontSize: 16,
+                            ? const CircularProgressIndicator(
                                 color: Colors.white,
-                              )),
+                              )
+                            : const Text(
+                                'Ingresar',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                ),
+                              ),
                       ),
                     ),
                     const SizedBox(height: 16),
                     Center(
                       child: GestureDetector(
-                        onTap: () =>
-                            context.push('/register'),
+                        onTap: () => context.push('/register'),
                         child: RichText(
                           text: const TextSpan(
                             text: '¿No tienes cuenta? ',

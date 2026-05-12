@@ -3,6 +3,14 @@ import 'package:go_router/go_router.dart';
 import 'package:ecomerk2/data/services/navigation_mode_service.dart';
 import 'package:ecomerk2/data/services/chat_api_service.dart';
 
+/// Página de chat privado con la IA del usuario.
+///
+/// Integra los endpoints reales del backend:
+///   GET  /chat/mensajes[?antes=<id>] — cargar historial (10 por página)
+///   POST /chat/mensajes              — guardar mensajes (usuario e IA)
+///
+/// La respuesta de la IA se genera de forma local (simulada) y luego
+/// se persiste en el backend con `esIa: true`.
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
   @override
@@ -13,7 +21,16 @@ class _ChatPageState extends State<ChatPage>
     with SingleTickerProviderStateMixin {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final FocusNode _focusNode = FocusNode();
+
+  /// Lista de mensajes en orden cronológico (el último es el más reciente).
+  final List<MensajeChat> _mensajes = [];
+
+  bool _cargando = false;
+  bool _cargandoHistorial = false;
+  bool _hayMasHistorial = false;
+
+  /// ID del mensaje más antiguo cargado, para paginar hacia atrás.
+  int? _cursorAntes;
 
   final List<Map<String, dynamic>> _mensajes = [];
   bool _cargando = false;
@@ -60,115 +77,136 @@ class _ChatPageState extends State<ChatPage>
     },
   ];
 
-  final List<String> _sugerenciasRapidas = [
-    '¿Precios en Éxito?',
-    '¿Precios en Olímpica?',
-    '¿Precios en Surtifamiliar?',
-    'Receta económica',
-    'Cómo ahorrar',
-  ];
-
   @override
   void initState() {
     super.initState();
-    _dotController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat();
-    _cargarHistorial();
+    _cargarHistorial(inicial: true);
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
-    _dotController.dispose();
     _controller.dispose();
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
-    _focusNode.dispose();
     super.dispose();
   }
 
-  Future<void> _cargarHistorial() async {
+  // ── Scroll infinito hacia arriba ───────────────────────────────────────────
+
+  void _onScroll() {
+    if (_scrollController.position.pixels <= 50 &&
+        _hayMasHistorial &&
+        !_cargandoHistorial) {
+      _cargarHistorial(inicial: false);
+    }
+  }
+
+  // ── Cargar historial desde el backend ─────────────────────────────────────
+
+  Future<void> _cargarHistorial({required bool inicial}) async {
+    if (_cargandoHistorial) return;
     setState(() => _cargandoHistorial = true);
-    final data = await ChatApiService.obtenerMensajes();
 
-    if (data != null && mounted) {
-      final mensajes =
-          List<Map<String, dynamic>>.from(data['mensajes'] ?? []);
-      final mensajesOrdenados = mensajes.reversed.toList();
+    try {
+      final resultado = await ChatApiService.obtenerMensajes(
+        antes: inicial ? null : _cursorAntes,
+      );
 
-      setState(() {
-        _mensajes.clear();
-        for (final m in mensajesOrdenados) {
-          _mensajes.add({
-            'id': m['id'],
-            'rol': m['esIa'] == true ? 'ia' : 'usuario',
-            'texto': m['contenido'],
-          });
-        }
-        _hayMas = data['hayMas'] == true;
-        if (mensajes.isNotEmpty) {
-          _cursorAntes = mensajes.last['id'];
-        }
-        _cargandoHistorial = false;
-        // Si hay historial, ocultar menú rápido
-        if (_mensajes.isNotEmpty) _mostrarMenuRapido = false;
-      });
+      if (resultado != null && mounted) {
+        // El backend devuelve los mensajes ordenados descendente (más reciente primero)
+        // Invertimos para mostrar el más antiguo arriba
+        final nuevos = resultado.mensajes.reversed.toList();
 
-      _scrollAbajo();
-    } else {
+        setState(() {
+          if (inicial) {
+            _mensajes.clear();
+          }
+          // Insertar al inicio (son mensajes más antiguos)
+          _mensajes.insertAll(0, nuevos);
+          _hayMasHistorial = resultado.hayMas;
+
+          if (nuevos.isNotEmpty) {
+            // El cursor apunta al id más pequeño cargado (el más antiguo)
+            _cursorAntes = _mensajes.first.id;
+          }
+        });
+
+        if (inicial) _scrollAbajo();
+      }
+    } catch (e) {
+      debugPrint('[ChatPage] Error cargando historial: $e');
+    } finally {
       if (mounted) setState(() => _cargandoHistorial = false);
     }
   }
 
-  Future<void> _cargarMas() async {
-    if (!_hayMas || _cursorAntes == null) return;
-    final data = await ChatApiService.obtenerMensajes(antes: _cursorAntes);
-    if (data != null && mounted) {
-      final mensajes =
-          List<Map<String, dynamic>>.from(data['mensajes'] ?? []);
-      final mensajesOrdenados = mensajes.reversed.toList();
-
-      setState(() {
-        for (final m in mensajesOrdenados) {
-          _mensajes.insert(0, {
-            'id': m['id'],
-            'rol': m['esIa'] == true ? 'ia' : 'usuario',
-            'texto': m['contenido'],
-          });
-        }
-        _hayMas = data['hayMas'] == true;
-        if (mensajes.isNotEmpty) {
-          _cursorAntes = mensajes.last['id'];
-        }
-      });
-    }
-  }
+  // ── Enviar mensaje ─────────────────────────────────────────────────────────
 
   Future<void> _enviarMensaje(String texto) async {
-    if (texto.trim().isEmpty || _cargando) return;
+    final contenido = texto.trim();
+    if (contenido.isEmpty) return;
     _controller.clear();
-    _focusNode.unfocus();
 
-    setState(() {
-      _mensajes.add({'rol': 'usuario', 'texto': texto});
-      _cargando = true;
-      _mostrarMenuRapido = false;
-    });
+    setState(() => _cargando = true);
     _scrollAbajo();
 
-    await ChatApiService.guardarMensaje(contenido: texto, esIa: false);
-    await Future.delayed(const Duration(seconds: 1));
-    final respuesta = _generarRespuestaSimulada(texto);
+    try {
+      // 1. Guardar mensaje del usuario en el backend
+      final mensajeUsuario = await ChatApiService.guardarMensaje(
+        contenido: contenido,
+        esIa: false,
+      );
 
-    if (mounted) {
-      setState(() {
-        _mensajes.add({'rol': 'ia', 'texto': respuesta});
-        _cargando = false;
-      });
-      _scrollAbajo();
-      await ChatApiService.guardarMensaje(contenido: respuesta, esIa: true);
+      if (mensajeUsuario != null && mounted) {
+        setState(() => _mensajes.add(mensajeUsuario));
+        _scrollAbajo();
+      } else {
+        // Si falla el guardado, igual mostramos localmente
+        final fallback = MensajeChat(
+          id: DateTime.now().millisecondsSinceEpoch,
+          usuarioId: 0,
+          contenido: contenido,
+          esIa: false,
+        );
+        if (mounted) setState(() => _mensajes.add(fallback));
+        _scrollAbajo();
+      }
+
+      // 2. Generar respuesta de la IA (simulada)
+      await Future.delayed(const Duration(milliseconds: 800));
+      final respuesta = _generarRespuestaSimulada(contenido);
+
+      // 3. Guardar respuesta de la IA en el backend
+      final mensajeIa = await ChatApiService.guardarMensaje(
+        contenido: respuesta,
+        esIa: true,
+      );
+
+      if (mounted) {
+        setState(() {
+          _cargando = false;
+          if (mensajeIa != null) {
+            _mensajes.add(mensajeIa);
+          } else {
+            // Fallback local si el guardado falla
+            _mensajes.add(MensajeChat(
+              id: DateTime.now().millisecondsSinceEpoch + 1,
+              usuarioId: 0,
+              contenido: respuesta,
+              esIa: true,
+            ));
+          }
+        });
+        _scrollAbajo();
+      }
+    } catch (e) {
+      debugPrint('[ChatPage] Error enviando mensaje: $e');
+      if (mounted) setState(() => _cargando = false);
     }
   }
+
+  // ── Respuesta simulada (IA local) ──────────────────────────────────────────
 
   String _generarRespuestaSimulada(String pregunta) {
     final p = pregunta.toLowerCase();
@@ -211,7 +249,7 @@ class _ChatPageState extends State<ChatPage>
         '• Sugerencias de recetas económicas\n'
         '• Consejos para ahorrar en el mercado\n'
         '• Comparación de precios entre Éxito, Olímpica y Surtifamiliar\n\n'
-        'Toca una de las opciones rápidas o escríbeme tu pregunta. ¿En qué más te ayudo?';
+        '¿En qué más te ayudo?';
   }
 
   void _scrollAbajo() {
@@ -225,6 +263,8 @@ class _ChatPageState extends State<ChatPage>
       }
     });
   }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -270,6 +310,10 @@ class _ChatPageState extends State<ChatPage>
                     fontSize: 11,
                   ),
                 ),
+                Text(
+                  'EcoMerca2',
+                  style: TextStyle(color: Color(0xFF9FE1CB), fontSize: 11),
+                ),
               ],
             ),
           ],
@@ -292,67 +336,63 @@ class _ChatPageState extends State<ChatPage>
           ),
         ],
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          if (_hayMasHistorial)
+            TextButton(
+              onPressed: () => _cargarHistorial(inicial: false),
+              child: const Text(
+                'Ver más',
+                style: TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ),
+        ],
       ),
       body: Column(
         children: [
-          // Banner cargando historial
-          if (_cargandoHistorial)
-            Container(
-              width: double.infinity,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              color: const Color(0xFFE1F5EE),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Color(0xFF1D9E75)),
-                  ),
-                  SizedBox(width: 8),
-                  Text('Cargando historial...',
-                      style: TextStyle(
-                          color: Color(0xFF0F6E56), fontSize: 12)),
-                ],
-              ),
+          // Indicador cargando historial
+          if (_cargandoHistorial && _mensajes.isEmpty)
+            const LinearProgressIndicator(
+              color: Color(0xFF1D9E75),
+              backgroundColor: Color(0xFFE1F5EE),
             ),
 
-          // Banner "Escribiendo..." visible
-          if (_cargando)
-            Container(
-              width: double.infinity,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: const Color(0xFFFFF8E1),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  AnimatedBuilder(
-                    animation: _dotController,
-                    builder: (context, child) {
-                      return Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: List.generate(3, (i) {
-                          final delay = i / 3;
-                          final value = (_dotController.value - delay)
-                              .clamp(0.0, 1.0);
-                          return Container(
-                            width: 6,
-                            height: 6,
-                            margin: const EdgeInsets.symmetric(horizontal: 2),
-                            decoration: BoxDecoration(
-                              color: Color.lerp(
-                                const Color(0xFFFFCC02),
-                                const Color(0xFFF9A825),
-                                value,
+          // Cuerpo del chat
+          Expanded(
+            child: (_mensajes.isEmpty && !_cargandoHistorial)
+                ? _buildEstadoInicial()
+                : ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _mensajes.length +
+                        (_cargandoHistorial ? 1 : 0) +
+                        (_cargando ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      // Spinner de carga de historial al inicio
+                      if (_cargandoHistorial && index == 0) {
+                        return const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF1D9E75),
                               ),
-                              shape: BoxShape.circle,
                             ),
-                          );
-                        }),
-                      );
+                          ),
+                        );
+                      }
+                      final msgIndex =
+                          index - (_cargandoHistorial ? 1 : 0);
+                      // Spinner de respuesta IA al final
+                      if (_cargando && msgIndex == _mensajes.length) {
+                        return _buildBurbujaCargando();
+                      }
+                      if (msgIndex < 0 || msgIndex >= _mensajes.length) {
+                        return const SizedBox.shrink();
+                      }
+                      return _buildBurbuja(_mensajes[msgIndex]);
                     },
                   ),
                   const SizedBox(width: 8),
@@ -415,40 +455,6 @@ class _ChatPageState extends State<ChatPage>
                           ),
           ),
 
-          // Sugerencias rápidas encima del input
-          if (!_cargando && _mensajes.isNotEmpty)
-            Container(
-              color: Colors.white,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: _sugerenciasRapidas.map((s) {
-                    return GestureDetector(
-                      onTap: () => _enviarMensaje(s),
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 8),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE1F5EE),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: const Color(0xFF1D9E75).withOpacity(0.3)),
-                        ),
-                        child: Text(s,
-                            style: const TextStyle(
-                                color: Color(0xFF0F6E56),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500)),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ),
-
           // Input
           Container(
             color: Colors.white,
@@ -460,7 +466,6 @@ class _ChatPageState extends State<ChatPage>
                     controller: _controller,
                     focusNode: _focusNode,
                     maxLines: null,
-                    // Campo bloqueado mientras carga
                     enabled: !_cargando,
                     decoration: InputDecoration(
                       hintText: _cargando
@@ -490,13 +495,12 @@ class _ChatPageState extends State<ChatPage>
                   onTap: _cargando
                       ? null
                       : () => _enviarMensaje(_controller.text),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
+                  child: Container(
                     width: 46,
                     height: 46,
                     decoration: BoxDecoration(
                       color: _cargando
-                          ? Colors.grey[300]
+                          ? Colors.grey
                           : const Color(0xFF1D9E75),
                       borderRadius: BorderRadius.circular(14),
                     ),
@@ -687,8 +691,8 @@ class _ChatPageState extends State<ChatPage>
     );
   }
 
-  Widget _buildBurbuja(Map<String, dynamic> msg) {
-    final esUsuario = msg['rol'] == 'usuario';
+  Widget _buildBurbuja(MensajeChat msg) {
+    final esUsuario = !msg.esIa;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -711,7 +715,8 @@ class _ChatPageState extends State<ChatPage>
           ],
           Flexible(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color:
                     esUsuario ? const Color(0xFF1D9E75) : Colors.white,
@@ -723,16 +728,17 @@ class _ChatPageState extends State<ChatPage>
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),
                 ],
               ),
               child: Text(
-                msg['texto'] ?? '',
+                msg.contenido,
                 style: TextStyle(
-                  color: esUsuario ? Colors.white : const Color(0xFF2C2C2A),
+                  color:
+                      esUsuario ? Colors.white : const Color(0xFF2C2C2A),
                   fontSize: 14,
                 ),
               ),

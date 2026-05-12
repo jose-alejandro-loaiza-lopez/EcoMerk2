@@ -1,66 +1,119 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'security_manager.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'storage_service.dart';
 
+/// Servicio de acceso a la API de usuarios.
+///
+/// El almacenamiento de sesión está completamente delegado a [StorageService]:
+/// - Token JWT → [FlutterSecureStorage] (cifrado, solo desde StorageService).
+/// - Nombre, email, userId → [SharedPreferences] (desde StorageService).
 class ApiService {
   static const String baseUrl =
       'https://usuarios-bd-production.up.railway.app/api/v1';
 
-  static http.Client get _client {
-    return SecurityManager().client ?? http.Client();
-  }
+  static final _storage = StorageService();
 
-  // ─── TOKEN ACCESS ────────────────────────────────────────────
-  static Future<void> guardarToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('jwt_token', token);
-    await prefs.setInt(
-      'token_timestamp',
-      DateTime.now().millisecondsSinceEpoch,
-    );
-  }
+  static http.Client get _client =>
+      SecurityManager().client ?? http.Client();
 
-  static Future<String?> obtenerToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('jwt_token');
-  }
+  // ══════════════════════════════════════════════════════════════════════════
+  // MÉTODOS DE STORAGE — delegan a StorageService
+  // ══════════════════════════════════════════════════════════════════════════
 
-  static Future<bool> tokenEstaVigente() async {
-    final prefs = await SharedPreferences.getInstance();
-    final timestamp = prefs.getInt('token_timestamp');
-    if (timestamp == null) return false;
-    final guardadoEn = DateTime.fromMillisecondsSinceEpoch(timestamp);
-    final diferencia = DateTime.now().difference(guardadoEn);
-    return diferencia.inHours < 23;
-  }
+  /// Recupera el access token JWT desde almacenamiento seguro.
+  static Future<String?> obtenerToken() => _storage.obtenerToken();
 
-  // ─── REFRESH TOKEN ───────────────────────────────────────────
-  static Future<void> guardarRefreshToken(String refreshToken) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('refresh_token', refreshToken);
-  }
+  /// Recupera el refresh token desde almacenamiento seguro.
+  static Future<String?> obtenerRefreshToken() => _storage.obtenerRefreshToken();
 
-  static Future<String?> obtenerRefreshToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('refresh_token');
-  }
+  /// Verifica si el token almacenado está vigente (< 23h).
+  static Future<bool> tokenEstaVigente() => _storage.tokenEstaVigente();
 
-  static Future<bool> renovarToken() async {
+  /// Elimina todos los datos de sesión de ambos storages.
+  static Future<void> borrarToken() => _storage.limpiarSesion();
+
+  /// Recupera el ID de usuario desde SharedPreferences.
+  static Future<int?> obtenerUserId() => _storage.obtenerUserId();
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // LOGIN (retrocompatibilidad con AuthCheck en main.dart)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /// Realiza login y persiste la sesión a través de [StorageService].
+  ///
+  /// Para el flujo con estados Loading/Success/Error, usar [LoginService].
+  static Future<Map<String, dynamic>> login({
+    required String email,
+    required String password,
+  }) async {
     try {
-      final refreshToken = await obtenerRefreshToken();
-      if (refreshToken == null) return false;
+      final response = await _client.post(
+        Uri.parse('$baseUrl/usuarios/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email, 'password': password}),
+      );
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        final token        = body['token']        as String? ?? '';
+        final refreshToken = body['refreshToken']  as String? ?? '';
+        final userId       = body['id']            as int?    ?? 0;
+        final usuarioObj   = body['usuario'] as Map<String, dynamic>?;
+        final nombre       = usuarioObj?['nombre'] as String?
+                          ?? body['nombre']         as String?
+                          ?? '';
+        final emailResp    = usuarioObj?['email']  as String?
+                          ?? body['email']          as String?
+                          ?? email;
+
+        await _storage.guardarSesion(
+          token:        token,
+          refreshToken: refreshToken,
+          nombre:       nombre,
+          email:        emailResp,
+          usuarioId:    userId,
+        );
+        return {'exito': true};
+      } else {
+        return {'exito': false, 'mensaje': 'Correo o contraseña incorrectos'};
+      }
+    } catch (e) {
+      return {'exito': false, 'mensaje': 'No se pudo conectar al servidor'};
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // RENOVAR TOKENS (POST /auth/refresh)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /// Renueva el access token usando el refresh token almacenado.
+  ///
+  /// Llama a `POST /auth/refresh` con el refresh token actual;
+  /// si el servidor responde 200 guarda los nuevos tokens (rotación)
+  /// y devuelve `true`. Si falla, devuelve `false`.
+  static Future<bool> refreshTokens() async {
+    try {
+      final currentRefresh = await _storage.obtenerRefreshToken();
+      if (currentRefresh == null || currentRefresh.isEmpty) return false;
 
       final response = await _client.post(
         Uri.parse('$baseUrl/auth/refresh'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'refreshToken': refreshToken}),
+        body: jsonEncode({'refreshToken': currentRefresh}),
       );
 
       if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        await guardarToken(body['token']);
-        await guardarRefreshToken(body['refreshToken']);
+        final body       = jsonDecode(response.body) as Map<String, dynamic>;
+        final newToken   = body['token']        as String? ?? '';
+        final newRefresh = body['refreshToken'] as String? ?? '';
+
+        if (newToken.isEmpty) return false;
+
+        // Persistir los nuevos tokens rotados (solo tokens, datos de usuario sin cambio)
+        await _storage.guardarNuevosTokens(
+          token:        newToken,
+          refreshToken: newRefresh,
+        );
         return true;
       }
       return false;
@@ -69,55 +122,10 @@ class ApiService {
     }
   }
 
-  static Future<String?> obtenerTokenValido() async {
-    final vigente = await tokenEstaVigente();
-    if (!vigente) {
-      final renovado = await renovarToken();
-      if (!renovado) return null;
-    }
-    return await obtenerToken();
-  }
+  // ══════════════════════════════════════════════════════════════════════════
+  // REGISTRO
+  // ══════════════════════════════════════════════════════════════════════════
 
-  // ─── BORRAR SESIÓN ───────────────────────────────────────────
-  static Future<void> borrarToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('jwt_token');
-    await prefs.remove('refresh_token');
-    await prefs.remove('usuario_id');
-    await prefs.remove('token_timestamp');
-    await prefs.remove('user_email');
-    await prefs.remove('user_password');
-  }
-
-  // ─── USUARIO ID ──────────────────────────────────────────────
-  static Future<void> guardarUserId(int id) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('usuario_id', id);
-  }
-
-  static Future<int?> obtenerUserId() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt('usuario_id');
-  }
-
-  static Future<void> guardarCredenciales(
-      String email, String password) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user_email', email);
-    await prefs.setString('user_password', password);
-  }
-
-  static Future<Map<String, String>?> obtenerCredenciales() async {
-    final prefs = await SharedPreferences.getInstance();
-    final email = prefs.getString('user_email');
-    final password = prefs.getString('user_password');
-    if (email != null && password != null) {
-      return {'email': email, 'password': password};
-    }
-    return null;
-  }
-
-  // ─── REGISTRO ────────────────────────────────────────────────
   static Future<Map<String, dynamic>> registrar({
     required String nombre,
     required String email,
@@ -149,36 +157,10 @@ class ApiService {
     }
   }
 
-  // ─── LOGIN ───────────────────────────────────────────────────
-  static Future<Map<String, dynamic>> login({
-    required String email,
-    required String password,
-  }) async {
-    try {
-      final response = await _client.post(
-        Uri.parse('$baseUrl/usuarios/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password}),
-      );
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        await guardarToken(body['token']);
-        await guardarRefreshToken(body['refreshToken']);
-        await guardarUserId(body['id']);
-        await guardarCredenciales(email, password);
-        return {'exito': true};
-      } else {
-        return {
-          'exito': false,
-          'mensaje': 'Correo o contraseña incorrectos',
-        };
-      }
-    } catch (e) {
-      return {'exito': false, 'mensaje': 'No se pudo conectar al servidor'};
-    }
-  }
+  // ══════════════════════════════════════════════════════════════════════════
+  // OBTENER USUARIO (con detección de token expirado)
+  // ══════════════════════════════════════════════════════════════════════════
 
-  // ─── OBTENER USUARIO ─────────────────────────────────────────
   static Future<Map<String, dynamic>?> obtenerUsuario(int id) async {
     try {
       final token = await obtenerTokenValido();
@@ -204,7 +186,10 @@ class ApiService {
     }
   }
 
-  // ─── FAVORITOS ───────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // ACTUALIZAR FAVORITOS
+  // ══════════════════════════════════════════════════════════════════════════
+
   static Future<bool> actualizarLista(int id, List<dynamic> lista) async {
     try {
       final token = await obtenerTokenValido();
@@ -224,15 +209,51 @@ class ApiService {
     }
   }
 
-  static Future<List<dynamic>?> buscarProductos(String query) async {
-    final token = await obtenerTokenValido();
-    final response = await _client.get(
-      Uri.parse('$baseUrl/productos?search=$query'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    }
-    return [];
+  // ══════════════════════════════════════════════════════════════════════════
+  // HELPERS PARA PAYLOAD DE FAVORITOS
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /// Construye un objeto `ProductoFavorito` con el formato requerido por el backend:
+  ///
+  /// ```json
+  /// { "productId": "<link>", "notificaciones": false }
+  /// ```
+  ///
+  /// [productId] — identificador único del producto (usa el link del producto).
+  /// [notificaciones] — si el usuario quiere recibir alertas de precio.
+  static Map<String, dynamic> buildFavoritoPayload(
+    String productId, {
+    bool notificaciones = false,
+  }) =>
+      {'productId': productId, 'notificaciones': notificaciones};
+
+  /// Convierte una lista de objetos favoritos del backend (o de la UI)
+  /// al formato `[{productId, notificaciones}]` requerido por PATCH.
+  ///
+  /// Acepta tanto el formato antiguo (con campo `link`) como el nuevo
+  /// (con campo `productId`) para compatibilidad durante la migración.
+  static List<Map<String, dynamic>> normalizarFavoritos(
+    List<dynamic> lista,
+  ) {
+    return lista.map((e) {
+      if (e is Map<String, dynamic>) {
+        // Formato nuevo: ya tiene productId
+        if (e.containsKey('productId')) {
+          return {
+            'productId': e['productId'].toString(),
+            'notificaciones': e['notificaciones'] as bool? ?? false,
+          };
+        }
+        // Formato antiguo (legacy): tiene link, nombre, etc.
+        final id = (e['link'] ?? e['nombre'] ?? '').toString();
+        return {
+          'productId': id,
+          'notificaciones': e['notificaciones'] as bool? ?? false,
+        };
+      }
+      // Si es un string crudo, usarlo como productId
+      return {'productId': e.toString(), 'notificaciones': false};
+    }).toList();
   }
+
 }
