@@ -6,8 +6,14 @@ import 'package:ecomerk2/controllers/favorites/price_alert_controller.dart';
 ///
 /// Gestiona su propio estado de carga (async) y delega la lógica
 /// a [PriceAlertController].
+///
+/// Usa [productLink] como identificador único del producto para evitar
+/// colisiones entre productos con el mismo nombre.
 class PriceAlertButton extends StatefulWidget {
-  /// Nombre del producto tal como aparece en la lista de favoritos.
+  /// Link único del producto (usado como clave de la alerta).
+  final String productLink;
+
+  /// Nombre legible del producto (para mostrar en notificaciones y snackbars).
   final String nombreProducto;
 
   /// Precio de referencia para detectar cambios (puede ser null si
@@ -16,6 +22,7 @@ class PriceAlertButton extends StatefulWidget {
 
   const PriceAlertButton({
     super.key,
+    required this.productLink,
     required this.nombreProducto,
     this.precioReferencia,
   });
@@ -58,11 +65,13 @@ class _PriceAlertButtonState extends State<PriceAlertButton>
   }
 
   Future<void> _verificarEstado() async {
-    final suscrito = await _controller.estasSuscrito(widget.nombreProducto);
-    if (mounted) setState(() {
-      _suscrito = suscrito;
-      _cargando = false;
-    });
+    final suscrito = await _controller.estasSuscrito(widget.productLink);
+    if (mounted) {
+      setState(() {
+        _suscrito = suscrito;
+        _cargando = false;
+      });
+    }
   }
 
   Future<void> _toggleAlerta() async {
@@ -73,7 +82,7 @@ class _PriceAlertButtonState extends State<PriceAlertButton>
     setState(() => _cargando = true);
 
     if (_suscrito) {
-      await _controller.cancelar(widget.nombreProducto);
+      await _controller.cancelar(widget.productLink);
       if (mounted) {
         setState(() {
           _suscrito = false;
@@ -103,7 +112,10 @@ class _PriceAlertButtonState extends State<PriceAlertButton>
       }
     } else {
       await _controller.suscribir(
-          widget.nombreProducto, widget.precioReferencia);
+        widget.productLink,
+        widget.nombreProducto,
+        widget.precioReferencia,
+      );
       if (mounted) {
         setState(() {
           _suscrito = true;
@@ -165,8 +177,8 @@ class _PriceAlertButtonState extends State<PriceAlertButton>
             height: 32,
             decoration: BoxDecoration(
               color: _suscrito
-                  ? const Color(0xFF1D9E75).withOpacity(0.12)
-                  : Colors.grey.withOpacity(0.1),
+                  ? const Color(0xFF1D9E75).withValues(alpha: 0.12)
+                  : Colors.grey.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:ecomerk2/data/services/navigation_mode_service.dart';
-import 'package:ecomerk2/data/services/user_api_service.dart';
 import 'package:ecomerk2/data/services/security_manager.dart';
+import 'package:ecomerk2/data/services/storage_service.dart';
 import 'package:ecomerk2/data/services/notification_service.dart';
 import 'package:ecomerk2/core/workers/price_check_worker.dart';
 import 'routes/app_routes.dart';
@@ -28,7 +28,6 @@ Future<void> main() async {
 
   runApp(const MyApp());
 }
-
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -63,30 +62,21 @@ class _AuthCheckState extends State<AuthCheck> {
     // Obtener nuevas llaves RSA/AES al iniciar
     await SecurityManager().refreshKeys();
 
-    // Intentar inicio de sesión automático para obtener token nuevo
-    final credenciales = await ApiService.obtenerCredenciales();
-    if (credenciales != null &&
-        credenciales['email'] != null &&
-        credenciales['password'] != null) {
-      final loginResult = await ApiService.login(
-        email: credenciales['email']!,
-        password: credenciales['password']!,
-      );
-      if (loginResult['exito'] == true) {
-        if (mounted) context.go('/home');
-        return;
-      }
-    }
+    final storage = StorageService();
 
-    // Fallback: verificar si ya hay token almacenado
-    final token = await ApiService.obtenerToken();
-    final userId = await ApiService.obtenerUserId();
+    // Intentar auto-login con credenciales en SharedPreferences (legacy)
+    // Si el token seguro está vigente, ir directo al home
+    final tokenVigente = await storage.tokenEstaVigente();
+    final token = await storage.obtenerToken();
+    final userId = await storage.obtenerUserId();
 
-    if (token != null && userId != null) {
+    if (tokenVigente && token != null && userId != null) {
       if (mounted) context.go('/home');
-    } else {
-      if (mounted) context.go('/login');
+      return;
     }
+
+    // Sin sesión válida: ir al login
+    if (mounted) context.go('/login');
   }
 
   @override
