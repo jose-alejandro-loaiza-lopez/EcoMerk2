@@ -163,7 +163,9 @@ class ApiService {
 
   static Future<Map<String, dynamic>?> obtenerUsuario(int id) async {
     try {
-      final token = await obtenerToken();
+      final token = await obtenerTokenValido();
+      if (token == null) return {'_tokenExpirado': true};
+
       final response = await _client.get(
         Uri.parse('$baseUrl/usuarios/$id'),
         headers: {
@@ -190,7 +192,9 @@ class ApiService {
 
   static Future<bool> actualizarLista(int id, List<dynamic> lista) async {
     try {
-      final token = await obtenerToken();
+      final token = await obtenerTokenValido();
+      if (token == null) return false;
+
       final response = await _client.patch(
         Uri.parse('$baseUrl/usuarios/$id/favoritos'),
         headers: {
