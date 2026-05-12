@@ -1,3 +1,4 @@
+
 import '../../data/services/price_alert_service.dart';
 
 /// Controlador para la lógica de alertas de precio.
