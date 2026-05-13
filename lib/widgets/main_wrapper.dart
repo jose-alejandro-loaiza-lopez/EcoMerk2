@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../data/services/navigation_mode_service.dart';
-import '../data/services/user_api_service.dart';
 
 class MainWrapper extends StatefulWidget {
   final Widget child;

@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:html/parser.dart' as html_parser;
-import 'package:html/dom.dart' as dom;
 
 class MarketApiService {
   static Future<List<dynamic>> buscarEnTiendas(
@@ -200,13 +198,13 @@ class MarketApiService {
           double precio = (item['currentPrice'] as num?)?.toDouble() ?? 0.0;
 
           String slugCrudo = item['slug'] ?? '';
-          String productSlug = slugCrudo.contains('/')
+          String productId = slugCrudo.contains('/')
               ? slugCrudo.split('/').last
               : slugCrudo;
 
           if (precio > 0) {
             resultados.add({
-              'slug': productSlug,
+              'id': productId,
               'nombre': item['name'] ?? 'Producto Surtifamiliar',
               'precio': precio,
               'tienda': 'Surtifamiliar',

@@ -43,15 +43,14 @@ class ApiService {
   /// - Rotación: el backend invalida el refresh token anterior
   ///   y devuelve uno nuevo — ambos deben actualizarse en el cliente.
   ///
-  /// Endpoint público: NO usa el SecureClient cifrado (no envía
-  /// Authorization header), solo http.Client directo.
+  /// Endpoint público: usa SecureClient para RSA/SHA pero NO envía
+  /// Authorization header.
   static Future<bool> renovarToken() async {
     try {
       final refreshToken = await obtenerRefreshToken();
       if (refreshToken == null) return false;
 
-      // POST /auth/refresh es público, NO necesita SecureClient
-      final response = await http.Client().post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/auth/refresh'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'refreshToken': refreshToken}),
@@ -109,8 +108,7 @@ class ApiService {
     return await _storage.obtenerUserId();
   }
 
-  static Future<void> guardarCredenciales(
-      String email, String password) async {
+  static Future<void> guardarCredenciales(String email, String password) async {
     await _storage.guardarCredenciales(email, password);
   }
 
@@ -175,10 +173,7 @@ class ApiService {
         await guardarCredenciales(email, password);
         return {'exito': true};
       } else {
-        return {
-          'exito': false,
-          'mensaje': 'Correo o contraseña incorrectos',
-        };
+        return {'exito': false, 'mensaje': 'Correo o contraseña incorrectos'};
       }
     } catch (e) {
       return {'exito': false, 'mensaje': 'No se pudo conectar al servidor'};
@@ -225,8 +220,17 @@ class ApiService {
       // productId ya viene en formato "tienda::id" desde search_page
       final listaFormateada = lista.map((item) {
         if (item is Map) {
+          final String idDetectado =
+              item['productId']?.toString() ?? item['id']?.toString() ?? '';
+
+          if (idDetectado.isEmpty) {
+            print(
+              "⚠️ Alerta: Se intentó enviar un favorito sin ID. Item: $item",
+            );
+          }
+
           return {
-            'productId': item['productId'] ?? item['link'] ?? item['nombre'] ?? '',
+            'productId': idDetectado,
             'notificaciones': item['notificaciones'] ?? false,
           };
         }
