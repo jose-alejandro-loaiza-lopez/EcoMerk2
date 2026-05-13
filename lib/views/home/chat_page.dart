@@ -1,10 +1,31 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:ecomerk2/data/services/navigation_mode_service.dart';
 import 'package:ecomerk2/data/services/chat_api_service.dart';
+import 'package:ecomerk2/data/services/user_api_service.dart';
+import 'package:ecomerk2/data/services/pruduct_details_service.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
+
+  /// Permite que una nueva instancia sepa si hay una IA procesando en
+  /// background y espere a que termine para mostrar la respuesta.
+  static Completer<void>? _completerProcesamiento;
+
+  static Future<void>? get procesamientoPendiente =>
+      _completerProcesamiento?.future;
+
+  static void _iniciarProcesamiento() {
+    _completerProcesamiento = Completer<void>();
+  }
+
+  static void _completarProcesamiento() {
+    _completerProcesamiento?.complete();
+    _completerProcesamiento = null;
+  }
+
   @override
   State<ChatPage> createState() => _ChatPageState();
 }
@@ -16,9 +37,11 @@ class _ChatPageState extends State<ChatPage>
   final FocusNode _focusNode = FocusNode();
 
   final List<Map<String, dynamic>> _mensajes = [];
+  final List<Map<String, dynamic>> _favoritos = [];
   bool _cargando = false;
   bool _cargandoHistorial = true;
   bool _hayMas = false;
+  bool _cargandoMas = false;
   int? _cursorAntes;
   bool _mostrarMenuRapido = true;
 
@@ -46,7 +69,8 @@ class _ChatPageState extends State<ChatPage>
       'icono': Icons.compare_arrows_rounded,
       'titulo': 'Comparar',
       'subtitulo': 'Precios entre tiendas',
-      'mensaje': '¿Qué productos están más baratos entre Éxito, Olímpica y Surtifamiliar?',
+      'mensaje':
+          '¿Qué productos están más baratos entre Éxito, Olímpica y Surtifamiliar?',
       'color': const Color(0xFFFFF8E1),
       'colorIcon': const Color(0xFFF9A825),
     },
@@ -76,12 +100,16 @@ class _ChatPageState extends State<ChatPage>
       duration: const Duration(milliseconds: 1200),
     )..repeat();
     _cargarHistorial();
+    _cargarFavoritos();
+    _esperarProcesamientoPendiente();
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
     _dotController.dispose();
     _controller.dispose();
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -92,13 +120,11 @@ class _ChatPageState extends State<ChatPage>
     final data = await ChatApiService.obtenerMensajes();
 
     if (data != null && mounted) {
-      final mensajes =
-          List<Map<String, dynamic>>.from(data['mensajes'] ?? []);
-      final mensajesOrdenados = mensajes.reversed.toList();
+      final mensajes = List<Map<String, dynamic>>.from(data['mensajes'] ?? []);
 
       setState(() {
         _mensajes.clear();
-        for (final m in mensajesOrdenados) {
+        for (final m in mensajes) {
           _mensajes.add({
             'id': m['id'],
             'rol': m['esIa'] == true ? 'ia' : 'usuario',
@@ -110,27 +136,97 @@ class _ChatPageState extends State<ChatPage>
           _cursorAntes = mensajes.last['id'];
         }
         _cargandoHistorial = false;
-        // Si hay historial, ocultar menú rápido
         if (_mensajes.isNotEmpty) _mostrarMenuRapido = false;
       });
-
-      _scrollAbajo();
     } else {
       if (mounted) setState(() => _cargandoHistorial = false);
     }
+  }
+
+  Future<void> _cargarFavoritos() async {
+    final userId = await ApiService.obtenerUserId();
+    if (userId == null) return;
+    final usuario = await ApiService.obtenerUsuario(userId);
+    if (usuario == null || usuario['_tokenExpirado'] == true) return;
+    final raw = List<dynamic>.from(
+      usuario['favoritos'] ?? usuario['alimentosFavoritos'] ?? [],
+    );
+
+    final List<Map<String, dynamic>> enriquecidos = [];
+    for (final item in raw) {
+      if (item is! Map) {
+        enriquecidos.add({'nombre': item.toString()});
+        continue;
+      }
+
+      final rawProductId = (item['productId'] ?? '').toString();
+      if (rawProductId.isEmpty) {
+        enriquecidos.add(Map<String, dynamic>.from(item));
+        continue;
+      }
+
+      String tienda = '';
+      String productId = rawProductId;
+      if (rawProductId.contains('::')) {
+        final parts = rawProductId.split('::');
+        tienda = parts[0];
+        productId = parts.sublist(1).join('::');
+      }
+
+      if (productId.isEmpty || tienda.isEmpty) {
+        enriquecidos.add(Map<String, dynamic>.from(item));
+        continue;
+      }
+
+      try {
+        final detalles = await ProductDetailsService.consultarProductoPorId(
+          productId,
+          tienda,
+        );
+
+        if (detalles != null) {
+          enriquecidos.add({
+            ...Map<String, dynamic>.from(item),
+            'nombre': detalles['nombre'] ?? item['nombre'],
+            'precio': '\$${_formatearPrecio(detalles['precio'] as double)}',
+            'imagen': detalles['imagen'] ?? item['imagen'],
+            'link': detalles['link'] ?? item['link'],
+            'tienda': detalles['tienda'] ?? tienda,
+            'productId': rawProductId,
+          });
+        } else {
+          enriquecidos.add(Map<String, dynamic>.from(item));
+        }
+      } catch (e) {
+        enriquecidos.add(Map<String, dynamic>.from(item));
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _favoritos.addAll(enriquecidos);
+      });
+    }
+  }
+
+  String _formatearPrecio(double precio) {
+    return precio
+        .toStringAsFixed(0)
+        .replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]}.',
+        );
   }
 
   Future<void> _cargarMas() async {
     if (!_hayMas || _cursorAntes == null) return;
     final data = await ChatApiService.obtenerMensajes(antes: _cursorAntes);
     if (data != null && mounted) {
-      final mensajes =
-          List<Map<String, dynamic>>.from(data['mensajes'] ?? []);
-      final mensajesOrdenados = mensajes.reversed.toList();
+      final mensajes = List<Map<String, dynamic>>.from(data['mensajes'] ?? []);
 
       setState(() {
-        for (final m in mensajesOrdenados) {
-          _mensajes.insert(0, {
+        for (final m in mensajes.reversed) {
+          _mensajes.add({
             'id': m['id'],
             'rol': m['esIa'] == true ? 'ia' : 'usuario',
             'texto': m['contenido'],
@@ -142,6 +238,16 @@ class _ChatPageState extends State<ChatPage>
         }
       });
     }
+    _cargandoMas = false;
+  }
+
+  void _onScroll() {
+    if (!_hayMas || _cargandoMas || !_scrollController.hasClients) return;
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 100) {
+      _cargandoMas = true;
+      _cargarMas();
+    }
   }
 
   Future<void> _enviarMensaje(String texto) async {
@@ -150,80 +256,53 @@ class _ChatPageState extends State<ChatPage>
     _focusNode.unfocus();
 
     setState(() {
-      _mensajes.add({'rol': 'usuario', 'texto': texto});
+      _mensajes.insert(0, {'rol': 'usuario', 'texto': texto});
       _cargando = true;
       _mostrarMenuRapido = false;
     });
-    _scrollAbajo();
 
     await ChatApiService.guardarMensaje(contenido: texto, esIa: false);
-    await Future.delayed(const Duration(seconds: 1));
-    final respuesta = _generarRespuestaSimulada(texto);
 
-    if (mounted) {
-      setState(() {
-        _mensajes.add({'rol': 'ia', 'texto': respuesta});
-        _cargando = false;
-      });
-      _scrollAbajo();
-      await ChatApiService.guardarMensaje(contenido: respuesta, esIa: true);
-    }
+    // La IA corre en background; la respuesta se guarda en el backend
+    // aunque el widget se destruya al cambiar de ventana.
+    ChatPage._iniciarProcesamiento();
+    _procesarRespuestaIA(texto);
   }
 
-  String _generarRespuestaSimulada(String pregunta) {
-    final p = pregunta.toLowerCase();
-    if (p.contains('receta') || p.contains('cocinar') || p.contains('comer')) {
-      return '🍽️ ¡Claro! Con los productos de tu lista puedo sugerirte varias recetas económicas.\n\n'
-          'Por ejemplo, con arroz y pollo puedes hacer un delicioso arroz con pollo al estilo colombiano. '
-          'Solo necesitas: arroz, pollo, cebolla, ajo, tomate y especias.\n\n'
-          '¿Quieres que busque los precios de estos ingredientes en Éxito, Olímpica y Surtifamiliar?';
-    }
-    if (p.contains('ahorro') || p.contains('barato') || p.contains('precio')) {
-      return '💰 Para ahorrar en tu mercado semanal te recomiendo:\n\n'
-          '1. Compara precios usando el buscador de EcoMerca2\n'
-          '2. Revisa tus favoritos para ver cuándo bajan de precio\n'
-          '3. Compra granos y enlatados en mayor cantidad\n\n'
-          '¿Quieres que compare algún producto específico entre Éxito, Olímpica y Surtifamiliar?';
-    }
-    if (p.contains('surtifamiliar')) {
-      return '🏪 Surtifamiliar es uno de los supermercados que comparamos en EcoMerca2. '
-          'Generalmente tiene buenos precios en granos, lácteos y productos de aseo.\n\n'
-          '¿Qué producto quieres comparar entre Éxito, Olímpica y Surtifamiliar?';
-    }
-    if (p.contains('éxito') || p.contains('exito')) {
-      return '🏪 Éxito es una de las tiendas disponibles en EcoMerca2. '
-          'Usa el buscador para comparar sus precios con Olímpica y Surtifamiliar en tiempo real.\n\n'
-          '¿Qué producto quieres buscar?';
-    }
-    if (p.contains('olímpica') || p.contains('olimpica')) {
-      return '🏪 Olímpica es una de las tiendas disponibles en EcoMerca2. '
-          'Puedes comparar sus precios con Éxito y Surtifamiliar usando el buscador.\n\n'
-          '¿Qué producto quieres buscar?';
-    }
-    if (p.contains('tienda') || p.contains('supermercado')) {
-      return '🏪 En EcoMerca2 comparamos precios entre 3 tiendas:\n\n'
-          '• Éxito\n'
-          '• Olímpica\n'
-          '• Surtifamiliar\n\n'
-          'Usa el buscador para ver en tiempo real cuál tiene el precio más bajo. ¿Qué producto quieres comparar?';
-    }
-    return '🤖 Entiendo tu consulta. Como asistente de EcoMerca2, puedo ayudarte con:\n\n'
-        '• Sugerencias de recetas económicas\n'
-        '• Consejos para ahorrar en el mercado\n'
-        '• Comparación de precios entre Éxito, Olímpica y Surtifamiliar\n\n'
-        'Toca una de las opciones rápidas o escríbeme tu pregunta. ¿En qué más te ayudo?';
-  }
+  Future<void> _procesarRespuestaIA(String texto) async {
+    try {
+      final respuesta = await ChatApiService.preguntarIA(texto, _favoritos);
+      final textoRespuesta =
+          respuesta ??
+          'Lo siento, no pude procesar tu consulta. Intenta de nuevo.';
 
-  void _scrollAbajo() {
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+      await ChatApiService.guardarMensaje(
+        contenido: textoRespuesta,
+        esIa: true,
+      );
+
+      if (mounted) {
+        setState(() {
+          _mensajes.insert(0, {'rol': 'ia', 'texto': textoRespuesta});
+          _cargando = false;
+        });
       }
-    });
+    } finally {
+      ChatPage._completarProcesamiento();
+    }
+  }
+
+  /// Si hay una IA procesando en background desde una instancia anterior
+  /// (ej. el usuario salió y volvió), espera a que termine y recarga.
+  Future<void> _esperarProcesamientoPendiente() async {
+    final pendiente = ChatPage.procesamientoPendiente;
+    if (pendiente == null) return;
+    if (mounted) setState(() => _cargando = true);
+    await pendiente;
+    if (mounted) {
+      setState(() => _cargando = false);
+      await _cargarHistorial();
+    }
   }
 
   @override
@@ -249,20 +328,26 @@ class _ChatPageState extends State<ChatPage>
                 color: const Color(0xFF0F6E56),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.auto_awesome_rounded,
-                  color: Colors.white, size: 20),
+              child: const Icon(
+                Icons.auto_awesome_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 10),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Asistente IA',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600)),
+                const Text(
+                  'Asistente IA',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 Text(
-                  _cargando ? 'Escribiendo...' : 'EcoMerca2',
+                  _cargando ? 'Escribiendo...' : 'EcoMerk2',
                   style: TextStyle(
                     color: _cargando
                         ? const Color(0xFFFFE082)
@@ -275,12 +360,6 @@ class _ChatPageState extends State<ChatPage>
           ],
         ),
         actions: [
-          if (_hayMas)
-            IconButton(
-              onPressed: _cargarMas,
-              icon: const Icon(Icons.history, color: Colors.white),
-              tooltip: 'Cargar mensajes anteriores',
-            ),
           IconButton(
             onPressed: () =>
                 setState(() => _mostrarMenuRapido = !_mostrarMenuRapido),
@@ -299,8 +378,7 @@ class _ChatPageState extends State<ChatPage>
           if (_cargandoHistorial)
             Container(
               width: double.infinity,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               color: const Color(0xFFE1F5EE),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -309,12 +387,15 @@ class _ChatPageState extends State<ChatPage>
                     width: 14,
                     height: 14,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Color(0xFF1D9E75)),
+                      strokeWidth: 2,
+                      color: Color(0xFF1D9E75),
+                    ),
                   ),
                   SizedBox(width: 8),
-                  Text('Cargando historial...',
-                      style: TextStyle(
-                          color: Color(0xFF0F6E56), fontSize: 12)),
+                  Text(
+                    'Cargando historial...',
+                    style: TextStyle(color: Color(0xFF0F6E56), fontSize: 12),
+                  ),
                 ],
               ),
             ),
@@ -323,8 +404,7 @@ class _ChatPageState extends State<ChatPage>
           if (_cargando)
             Container(
               width: double.infinity,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               color: const Color(0xFFFFF8E1),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -336,8 +416,10 @@ class _ChatPageState extends State<ChatPage>
                         mainAxisSize: MainAxisSize.min,
                         children: List.generate(3, (i) {
                           final delay = i / 3;
-                          final value = (_dotController.value - delay)
-                              .clamp(0.0, 1.0);
+                          final value = (_dotController.value - delay).clamp(
+                            0.0,
+                            1.0,
+                          );
                           return Container(
                             width: 6,
                             height: 6,
@@ -359,35 +441,12 @@ class _ChatPageState extends State<ChatPage>
                   const Text(
                     'El asistente está escribiendo...',
                     style: TextStyle(
-                        color: Color(0xFFF57F17),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500),
+                      color: Color(0xFFF57F17),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
-              ),
-            ),
-
-          // Cargar más
-          if (_hayMas && !_cargandoHistorial)
-            GestureDetector(
-              onTap: _cargarMas,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                color: const Color(0xFFE1F5EE),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.keyboard_arrow_up,
-                        color: Color(0xFF1D9E75), size: 16),
-                    SizedBox(width: 4),
-                    Text('Cargar mensajes anteriores',
-                        style: TextStyle(
-                            color: Color(0xFF1D9E75),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500)),
-                  ],
-                ),
               ),
             ),
 
@@ -395,32 +454,33 @@ class _ChatPageState extends State<ChatPage>
           Expanded(
             child: _cargandoHistorial
                 ? const Center(
-                    child: CircularProgressIndicator(
-                        color: Color(0xFF1D9E75)))
+                    child: CircularProgressIndicator(color: Color(0xFF1D9E75)),
+                  )
                 : _mensajes.isEmpty && _mostrarMenuRapido
-                    ? _buildMenuInicial()
-                    : _mensajes.isEmpty
-                        ? _buildEstadoInicial()
-                        : ListView.builder(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.all(16),
-                            itemCount:
-                                _mensajes.length + (_cargando ? 1 : 0),
-                            itemBuilder: (context, index) {
-                              if (index == _mensajes.length && _cargando) {
-                                return _buildBurbujaCargando();
-                              }
-                              return _buildBurbuja(_mensajes[index]);
-                            },
-                          ),
+                ? _buildMenuInicial()
+                : _mensajes.isEmpty
+                ? _buildEstadoInicial()
+                : ListView.builder(
+                    reverse: true,
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _mensajes.length + (_cargando ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (_cargando && index == 0) {
+                        return _buildBurbujaCargando();
+                      }
+                      return _buildBurbuja(
+                        _mensajes[index - (_cargando ? 1 : 0)],
+                      );
+                    },
+                  ),
           ),
 
           // Sugerencias rápidas encima del input
           if (!_cargando && _mensajes.isNotEmpty)
             Container(
               color: Colors.white,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
@@ -430,18 +490,24 @@ class _ChatPageState extends State<ChatPage>
                       child: Container(
                         margin: const EdgeInsets.only(right: 8),
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFE1F5EE),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                              color: const Color(0xFF1D9E75).withOpacity(0.3)),
+                            color: const Color(0xFF1D9E75).withOpacity(0.3),
+                          ),
                         ),
-                        child: Text(s,
-                            style: const TextStyle(
-                                color: Color(0xFF0F6E56),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500)),
+                        child: Text(
+                          s,
+                          style: const TextStyle(
+                            color: Color(0xFF0F6E56),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
                     );
                   }).toList(),
@@ -467,16 +533,19 @@ class _ChatPageState extends State<ChatPage>
                           ? 'Espera la respuesta...'
                           : 'Pregúntame sobre recetas o precios...',
                       hintStyle: TextStyle(
-                          color: _cargando
-                              ? Colors.orange[200]
-                              : Colors.grey[400],
-                          fontSize: 14),
+                        color: _cargando
+                            ? Colors.orange[200]
+                            : Colors.grey[400],
+                        fontSize: 14,
+                      ),
                       filled: true,
                       fillColor: _cargando
                           ? const Color(0xFFFFF8E1)
                           : const Color(0xFFF5F5F5),
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
                         borderSide: BorderSide.none,
@@ -531,15 +600,21 @@ class _ChatPageState extends State<ChatPage>
               color: const Color(0xFFE1F5EE),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Icon(Icons.auto_awesome_rounded,
-                color: Color(0xFF1D9E75), size: 36),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              color: Color(0xFF1D9E75),
+              size: 36,
+            ),
           ),
           const SizedBox(height: 16),
-          const Text('¿En qué te ayudo hoy?',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF2C2C2A))),
+          const Text(
+            '¿En qué te ayudo hoy?',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF2C2C2A),
+            ),
+          ),
           const SizedBox(height: 6),
           Text(
             'Comparo precios entre Éxito, Olímpica y Surtifamiliar',
@@ -572,21 +647,31 @@ class _ChatPageState extends State<ChatPage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Icon(item['icono'] as IconData,
-                          color: item['colorIcon'] as Color, size: 26),
+                      Icon(
+                        item['icono'] as IconData,
+                        color: item['colorIcon'] as Color,
+                        size: 26,
+                      ),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(item['titulo'],
-                              style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: item['colorIcon'] as Color)),
-                          Text(item['subtitulo'],
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: (item['colorIcon'] as Color)
-                                      .withOpacity(0.7))),
+                          Text(
+                            item['titulo'],
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: item['colorIcon'] as Color,
+                            ),
+                          ),
+                          Text(
+                            item['subtitulo'],
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: (item['colorIcon'] as Color).withOpacity(
+                                0.7,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -608,11 +693,14 @@ class _ChatPageState extends State<ChatPage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Tiendas disponibles',
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF2C2C2A))),
+                const Text(
+                  'Tiendas disponibles',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF2C2C2A),
+                  ),
+                ),
                 const SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -632,7 +720,8 @@ class _ChatPageState extends State<ChatPage>
 
   Widget _buildTiendaChip(String emoji, String nombre) {
     return GestureDetector(
-      onTap: () => _enviarMensaje('¿Qué productos están más baratos en $nombre?'),
+      onTap: () =>
+          _enviarMensaje('¿Qué productos están más baratos en $nombre?'),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
@@ -643,11 +732,14 @@ class _ChatPageState extends State<ChatPage>
           children: [
             Text(emoji, style: const TextStyle(fontSize: 20)),
             const SizedBox(height: 4),
-            Text(nombre,
-                style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF0F6E56))),
+            Text(
+              nombre,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF0F6E56),
+              ),
+            ),
           ],
         ),
       ),
@@ -667,15 +759,21 @@ class _ChatPageState extends State<ChatPage>
               color: const Color(0xFFE1F5EE),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Icon(Icons.auto_awesome_rounded,
-                color: Color(0xFF1D9E75), size: 36),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              color: Color(0xFF1D9E75),
+              size: 36,
+            ),
           ),
           const SizedBox(height: 16),
-          const Text('¿En qué te ayudo hoy?',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF2C2C2A))),
+          const Text(
+            '¿En qué te ayudo hoy?',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF2C2C2A),
+            ),
+          ),
           const SizedBox(height: 8),
           Text(
             'Comparo precios entre Éxito, Olímpica y Surtifamiliar',
@@ -689,52 +787,55 @@ class _ChatPageState extends State<ChatPage>
 
   Widget _buildBurbuja(Map<String, dynamic> msg) {
     final esUsuario = msg['rol'] == 'usuario';
+    final texto = msg['texto'] ?? '';
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        mainAxisAlignment:
-            esUsuario ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: esUsuario
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (!esUsuario) ...[
-            Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1D9E75),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.auto_awesome_rounded,
-                  color: Colors.white, size: 16),
-            ),
-            const SizedBox(width: 8),
-          ],
           Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color:
-                    esUsuario ? const Color(0xFF1D9E75) : Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(16),
-                  topRight: const Radius.circular(16),
-                  bottomLeft: Radius.circular(esUsuario ? 16 : 4),
-                  bottomRight: Radius.circular(esUsuario ? 4 : 16),
+            child: SelectionArea(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
+                decoration: BoxDecoration(
+                  color: esUsuario ? const Color(0xFF1D9E75) : Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(16),
+                    topRight: const Radius.circular(16),
+                    bottomLeft: Radius.circular(esUsuario ? 16 : 4),
+                    bottomRight: Radius.circular(esUsuario ? 4 : 16),
                   ),
-                ],
-              ),
-              child: Text(
-                msg['texto'] ?? '',
-                style: TextStyle(
-                  color: esUsuario ? Colors.white : const Color(0xFF2C2C2A),
-                  fontSize: 14,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
+                child: esUsuario
+                    ? Text(
+                        texto,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
+                      )
+                    : MarkdownBody(
+                        data: texto,
+                        styleSheet: MarkdownStyleSheet(
+                          p: const TextStyle(
+                            color: Color(0xFF2C2C2A),
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
               ),
             ),
           ),
@@ -756,13 +857,15 @@ class _ChatPageState extends State<ChatPage>
               color: const Color(0xFF1D9E75),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.auto_awesome_rounded,
-                color: Colors.white, size: 16),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              color: Colors.white,
+              size: 16,
+            ),
           ),
           const SizedBox(width: 8),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
@@ -774,8 +877,7 @@ class _ChatPageState extends State<ChatPage>
                   mainAxisSize: MainAxisSize.min,
                   children: List.generate(3, (i) {
                     final delay = i / 3;
-                    final value =
-                        ((_dotController.value - delay) % 1.0).abs();
+                    final value = ((_dotController.value - delay) % 1.0).abs();
                     return Container(
                       width: 7,
                       height: 7,

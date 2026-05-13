@@ -17,4 +17,8 @@ class EnvConfig {
   /// Cambia el valor en `.env` para apuntar a otro servidor.
   static String get baseUrl =>
       dotenv.env['BASE_URL'] ?? 'https://usuarios-bd-production.up.railway.app/api/v1';
+
+  /// API key de OpenRouter para el chat con IA.
+  static String get openRouterApiKey =>
+      dotenv.env['OPENROUTER_API_KEY'] ?? '';
 }
