@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ecomerk2/data/services/navigation_mode_service.dart';
 import 'package:ecomerk2/data/services/market_api_service.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
+import 'package:ecomerk2/data/services/product_api_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SearchPage extends StatefulWidget {
@@ -43,13 +44,24 @@ class _SearchPageState extends State<SearchPage> {
             usuario['favoritos'] ?? usuario['alimentosFavoritos'] ?? [],
           );
           setState(() {
-            _enFavoritos = favs
-                .map(
-                  (f) => (f is Map
-                      ? (f['link'] ?? f['nombre']).toString()
-                      : f.toString()),
-                )
-                .toSet();
+            _enFavoritos = favs.map((f) {
+              if (f is Map) {
+                // Parsear formato "tienda::id"
+                final rawProductId = f['productId']?.toString();
+                if (rawProductId != null && rawProductId.isNotEmpty) {
+                  String productId = rawProductId;
+                  if (rawProductId.contains('::')) {
+                    final parts = rawProductId.split('::');
+                    productId = parts
+                        .sublist(1)
+                        .join('::'); // Por si el id contiene ::
+                  }
+                  return productId;
+                }
+                return (f['link'] ?? f['nombre']).toString();
+              }
+              return f.toString();
+            }).toSet();
           });
         }
       }
@@ -163,9 +175,26 @@ class _SearchPageState extends State<SearchPage> {
       final itemLink = item['link'];
       final itemNombre = item['nombre'];
 
-      // Verificar si ya existe buscando por el link o nombre
+      final String rawId = item['id']?.toString().isNotEmpty == true
+          ? item['id'].toString()
+          : (itemLink ?? itemNombre ?? '');
+      final String tiendaTag = (item['tienda'] ?? '').toString();
+      final String compoundId = tiendaTag.isNotEmpty
+          ? '$tiendaTag::$rawId'
+          : rawId;
+
+      // Verificar si ya existe buscando por el id parseado, link o nombre
       int indexExiste = favoritosActuales.indexWhere((favorito) {
         if (favorito is Map) {
+          final rawProductId = favorito['productId']?.toString();
+          if (rawProductId != null && rawProductId.isNotEmpty) {
+            String favId = rawProductId;
+            if (rawProductId.contains('::')) {
+              final parts = rawProductId.split('::');
+              favId = parts.sublist(1).join('::');
+            }
+            if (favId == rawId) return true;
+          }
           return favorito['link'] == itemLink ||
               favorito['nombre'] == itemNombre;
         }
@@ -180,6 +209,7 @@ class _SearchPageState extends State<SearchPage> {
         if (mounted) {
           if (exito) {
             setState(() {
+              _enFavoritos.remove(rawId);
               _enFavoritos.remove(itemLink?.toString() ?? '');
               _enFavoritos.remove(itemNombre?.toString() ?? '');
             });
@@ -194,12 +224,17 @@ class _SearchPageState extends State<SearchPage> {
         }
       } else {
         // Agregar a favoritos
+        // Codificamos tienda::id en productId para poder recuperar ambos al cargar favoritos
+        // ya que el backend solo guarda {productId, notificaciones}
+
         final productoFavorito = {
+          "productId": compoundId,
           "nombre": itemNombre,
           "precio": "\$${_formatearPrecio(item['precio'] as double)}",
           "tienda": item['tienda'],
           "imagen": item['imagen'],
           "link": itemLink,
+          "notificaciones": false,
         };
 
         favoritosActuales.add(productoFavorito);
@@ -208,6 +243,7 @@ class _SearchPageState extends State<SearchPage> {
         if (mounted) {
           if (exito) {
             setState(() {
+              _enFavoritos.add(rawId);
               _enFavoritos.add(
                 itemLink?.toString() ?? itemNombre?.toString() ?? '',
               );
@@ -218,6 +254,23 @@ class _SearchPageState extends State<SearchPage> {
                 backgroundColor: Color(0xFF1D9E75),
               ),
             );
+
+            // Enviar precio al historial de precios automáticamente
+            final double? precioNum = item['precio'] is double
+                ? item['precio'] as double
+                : double.tryParse(
+                    item['precio']
+                        .toString()
+                        .replaceAll(r'$', '')
+                        .replaceAll('.', '')
+                        .trim(),
+                  );
+            if (precioNum != null && precioNum > 0) {
+              ProductApiService.agregarPrecio(
+                productId: compoundId,
+                precio: precioNum,
+              );
+            }
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Error al agregar a favoritos')),
@@ -459,7 +512,11 @@ class _SearchPageState extends State<SearchPage> {
                   final item = _resultadosFiltrados[index];
                   final ahorro = _calcularAhorro(item['precio'] as double);
                   final esMasBarato = ahorro.isNotEmpty;
+                  final String rawId = item['id']?.toString().isNotEmpty == true
+                      ? item['id'].toString()
+                      : (item['link'] ?? item['nombre'] ?? '');
                   final esFavorito =
+                      _enFavoritos.contains(rawId) ||
                       _enFavoritos.contains(item['link']) ||
                       _enFavoritos.contains(item['nombre']);
 

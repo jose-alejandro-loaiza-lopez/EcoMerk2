@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../data/services/navigation_mode_service.dart';
-import '../data/services/user_api_service.dart';
 
 class MainWrapper extends StatefulWidget {
   final Widget child;
@@ -18,7 +17,6 @@ class _MainWrapperState extends State<MainWrapper> {
     super.initState();
     NavigationModeService.instance.addListener(_onNavigationModeChanged);
     NavigationModeService.instance.load();
-    _cargarFavs();
   }
 
   @override
@@ -61,23 +59,6 @@ class _MainWrapperState extends State<MainWrapper> {
     }
   }
 
-  int _countFavs = 0;
-
-  Future<void> _cargarFavs() async {
-    final userId = await ApiService.obtenerUserId();
-    if (userId != null) {
-      final user = await ApiService.obtenerUsuario(userId);
-      if (user != null && mounted) {
-        final f = List.from(
-          user['favoritos'] ?? user['alimentosFavoritos'] ?? [],
-        );
-        setState(() {
-          _countFavs = f.length;
-        });
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final currentIndex = _calcularIndice(context);
@@ -101,35 +82,48 @@ class _MainWrapperState extends State<MainWrapper> {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem(
-                Icons.home_rounded,
-                'Inicio',
-                currentIndex == 0,
-                () => _onItemTapped(0, context),
-              ),
-              _buildNavItem(
-                Icons.search_rounded,
-                'Búsqueda',
-                currentIndex == 1,
-                () => _onItemTapped(1, context),
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildNavItem(
+                      Icons.home_rounded,
+                      'Inicio',
+                      currentIndex == 0,
+                      () => _onItemTapped(0, context),
+                    ),
+                    _buildNavItem(
+                      Icons.search_rounded,
+                      'Búsqueda',
+                      currentIndex == 1,
+                      () => _onItemTapped(1, context),
+                    ),
+                  ],
+                ),
               ),
               _buildNavItemCenter(
                 currentIndex == 2,
                 () => _onItemTapped(2, context),
               ),
-              _buildNavItem(
-                Icons.auto_awesome_rounded,
-                'IA',
-                currentIndex == 3,
-                () => _onItemTapped(3, context),
-              ),
-              _buildNavItem(
-                Icons.person_rounded,
-                'Perfil',
-                currentIndex == 4,
-                () => _onItemTapped(4, context),
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildNavItem(
+                      Icons.auto_awesome_rounded,
+                      'IA',
+                      currentIndex == 3,
+                      () => _onItemTapped(3, context),
+                    ),
+                    _buildNavItem(
+                      Icons.person_rounded,
+                      'Perfil',
+                      currentIndex == 4,
+                      () => _onItemTapped(4, context),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -207,29 +201,6 @@ class _MainWrapperState extends State<MainWrapper> {
               size: 24,
             ),
           ),
-          if (_countFavs > 0)
-            Positioned(
-              top: -4,
-              right: -4,
-              child: Container(
-                width: 20,
-                height: 20,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFD4537E),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    _countFavs > 9 ? '9+' : '$_countFavs',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-            ),
         ],
       ),
     );

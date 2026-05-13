@@ -11,7 +11,7 @@ class SecurityManager {
   SecurityManager._internal();
 
   SecureClient? _secureClient;
-  final String _url = "${ApiService.baseUrl}/usuarios/public-key";
+  String get _url => "${ApiService.baseUrl}/usuarios/public-key";
 
   SecureClient? get client => _secureClient;
 

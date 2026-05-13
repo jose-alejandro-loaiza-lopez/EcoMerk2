@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:html/parser.dart' as html_parser;
-import 'package:html/dom.dart' as dom;
 
 class MarketApiService {
   static Future<List<dynamic>> buscarEnTiendas(
@@ -22,7 +20,9 @@ class MarketApiService {
         todosLosResultados.addAll(lista);
       }
 
-      todosLosResultados.removeWhere((p) => p['precio'] == null || (p['precio'] as num) <= 0);
+      todosLosResultados.removeWhere(
+        (p) => p['precio'] == null || (p['precio'] as num) <= 0,
+      );
       todosLosResultados.sort((a, b) => a['precio'].compareTo(b['precio']));
     } catch (e) {
       debugPrint("Error en MarketApiService: $e");
@@ -66,7 +66,8 @@ class MarketApiService {
                 final offer = seller['commertialOffer'];
 
                 return {
-                  'nombre': product['productName'] ?? 'Sin nombre',
+                  'id': product['productId'],
+                  'nombre': product['productName'] ?? 'Producto Éxito',
                   'precio': (offer['Price'] as num).toDouble(),
                   'tienda': 'Éxito',
                   'imagen': item['images'][0]['imageUrl'] ?? '',
@@ -120,6 +121,7 @@ class MarketApiService {
 
             if (precio > 0) {
               resultados.add({
+                'id': item['productId'],
                 'nombre': item['productName'] ?? 'Producto Olímpica',
                 'precio': precio,
                 'tienda': 'Olímpica',
@@ -195,13 +197,19 @@ class MarketApiService {
         for (var item in items) {
           double precio = (item['currentPrice'] as num?)?.toDouble() ?? 0.0;
 
+          String slugCrudo = item['slug'] ?? '';
+          String productId = slugCrudo.contains('/')
+              ? slugCrudo.split('/').last
+              : slugCrudo;
+
           if (precio > 0) {
             resultados.add({
+              'id': productId,
               'nombre': item['name'] ?? 'Producto Surtifamiliar',
               'precio': precio,
               'tienda': 'Surtifamiliar',
               'imagen': baseImgUrl + (item['principalImage'] ?? ''),
-              'link': 'https://www.surtifamiliar.com/producto/${item['slug']}',
+              'link': slugCrudo,
             });
           }
         }

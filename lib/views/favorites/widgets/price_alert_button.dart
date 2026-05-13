@@ -14,10 +14,15 @@ class PriceAlertButton extends StatefulWidget {
   /// el producto no tiene precio guardado).
   final double? precioReferencia;
 
+  /// Callback invocado cuando el estado de notificaciones cambia.
+  /// Pasa `true` si se suscribió, `false` si canceló.
+  final void Function(bool suscrito)? onToggle;
+
   const PriceAlertButton({
     super.key,
     required this.nombreProducto,
     this.precioReferencia,
+    this.onToggle,
   });
 
   @override
@@ -79,6 +84,7 @@ class _PriceAlertButtonState extends State<PriceAlertButton>
           _suscrito = false;
           _cargando = false;
         });
+        widget.onToggle?.call(false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -109,6 +115,7 @@ class _PriceAlertButtonState extends State<PriceAlertButton>
           _suscrito = true;
           _cargando = false;
         });
+        widget.onToggle?.call(true);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
