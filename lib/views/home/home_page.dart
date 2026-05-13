@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ecomerk2/data/services/navigation_mode_service.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
+import 'package:ecomerk2/data/services/pruduct_details_service.dart';
+import 'package:ecomerk2/data/services/product_api_service.dart';
 import '../../widgets/custom_drawer.dart';
 
 class HomePage extends StatefulWidget {
@@ -174,6 +176,9 @@ class _HomePageState extends State<HomePage>
         _cargando = false;
       });
       _animController.forward();
+
+      // Enriquecer favoritos silenciosamente en segundo plano
+      _enriquecerFavoritosConDetalles(List.from(_favoritos));
     }
   }
 
@@ -206,6 +211,89 @@ class _HomePageState extends State<HomePage>
     if (partes.length >= 2)
       return '${partes[0][0]}${partes[1][0]}'.toUpperCase();
     return _nombre[0].toUpperCase();
+  }
+
+  String _formatearPrecio(double precio) {
+    if (precio == precio.truncateToDouble()) {
+      return precio.toInt().toString().replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+        (Match m) => '${m[1]}.',
+      );
+    } else {
+      return precio
+          .toStringAsFixed(2)
+          .replaceAllMapped(
+            RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+            (Match m) => '${m[1]}.',
+          );
+    }
+  }
+
+  Future<void> _enriquecerFavoritosConDetalles(List<dynamic> favoritos) async {
+    final List<Map<String, dynamic>> listaActualizada =
+        List<Map<String, dynamic>>.from(favoritos);
+    bool huboActualizacion = false;
+
+    await Future.wait(
+      listaActualizada.asMap().entries.map((entry) async {
+        final i = entry.key;
+        final item = entry.value;
+
+        final String rawProductId = (item['productId'] ?? '').toString();
+        if (rawProductId.isEmpty) return;
+
+        // Parsear formato "tienda::id"
+        String tienda = '';
+        String productId = rawProductId;
+        if (rawProductId.contains('::')) {
+          final parts = rawProductId.split('::');
+          tienda = parts[0];
+          productId = parts.sublist(1).join('::');
+        }
+
+        if (productId.isEmpty || tienda.isEmpty) return;
+
+        try {
+          final detalles = await ProductDetailsService.consultarProductoPorId(
+            productId,
+            tienda,
+          );
+
+          if (detalles != null) {
+            listaActualizada[i] = {
+              ...item,
+              'nombre': detalles['nombre'] ?? item['nombre'],
+              'precio': '\$${_formatearPrecio(detalles['precio'] as double)}',
+              'imagen': detalles['imagen'] ?? item['imagen'],
+              'link': detalles['link'] ?? item['link'],
+              'tienda': detalles['tienda'] ?? tienda,
+              'productId': rawProductId,
+              'notificaciones': item['notificaciones'] ?? false,
+            };
+            huboActualizacion = true;
+
+            // Enviar precio fresco al historial de precios
+            final double? precioFresco = detalles['precio'] is double
+                ? detalles['precio'] as double
+                : null;
+            if (precioFresco != null && precioFresco > 0) {
+              ProductApiService.agregarPrecio(
+                productId: rawProductId,
+                precio: precioFresco,
+              );
+            }
+          }
+        } catch (e) {
+          debugPrint('Error enriqueciendo favorito en Home $rawProductId: $e');
+        }
+      }),
+    );
+
+    if (huboActualizacion && mounted) {
+      setState(() {
+        _favoritos = listaActualizada;
+      });
+    }
   }
 
   @override
@@ -519,106 +607,111 @@ class _HomePageState extends State<HomePage>
                 _favoritos.isEmpty
                     ? SliverToBoxAdapter(child: _buildEstadoVacioFavoritos())
                     : SliverList(
-                        delegate: SliverChildBuilderDelegate((context, index) {
-                          final fav = _favoritos[index];
-                          final nombre =
-                              fav['nombre']?.toString() ?? 'Producto';
-                          final tienda = fav['tienda']?.toString() ?? '';
-                          final precio = fav['precio']?.toString() ?? '';
-                          final imagen = fav['imagen']?.toString() ?? '';
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final fav = _favoritos[index];
+                            final nombre =
+                                fav['nombre']?.toString() ?? 'Producto';
+                            final tienda = fav['tienda']?.toString() ?? '';
+                            final precio = fav['precio']?.toString() ?? '';
+                            final imagen = fav['imagen']?.toString() ?? '';
 
-                          return GestureDetector(
-                            onTap: () => context.go('/favorites'),
-                            child: Container(
-                              margin: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: const Color(0xFFE8E8E8),
-                                  width: 0.5,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  // Imagen o ícono
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: imagen.isNotEmpty
-                                        ? Image.network(
-                                            imagen,
-                                            width: 46,
-                                            height: 46,
-                                            fit: BoxFit.contain,
-                                            errorBuilder: (_, __, ___) =>
-                                                _buildIconFav(),
-                                          )
-                                        : _buildIconFav(),
+                            return GestureDetector(
+                              onTap: () => context.go('/favorites'),
+                              child: Container(
+                                margin: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: const Color(0xFFE8E8E8),
+                                    width: 0.5,
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          nombre,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFF2C2C2A),
-                                          ),
-                                        ),
-                                        if (precio.isNotEmpty &&
-                                            precio != r'$0')
+                                ),
+                                child: Row(
+                                  children: [
+                                    // Imagen o ícono
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: imagen.isNotEmpty
+                                          ? Image.network(
+                                              imagen,
+                                              width: 46,
+                                              height: 46,
+                                              fit: BoxFit.contain,
+                                              errorBuilder: (_, __, ___) =>
+                                                  _buildIconFav(),
+                                            )
+                                          : _buildIconFav(),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
                                           Text(
-                                            '$precio · $tienda',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.grey[500],
+                                            nombre,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF2C2C2A),
                                             ),
                                           ),
-                                      ],
+                                          if (precio.isNotEmpty &&
+                                              precio != r'$0')
+                                            Text(
+                                              '$precio · $tienda',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.grey[500],
+                                              ),
+                                            ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 5,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFE1F5EE),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.compare_arrows_rounded,
-                                          color: Color(0xFF0F6E56),
-                                          size: 13,
-                                        ),
-                                        SizedBox(width: 4),
-                                        Text(
-                                          'Comparar',
-                                          style: TextStyle(
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFE1F5EE),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.compare_arrows_rounded,
                                             color: Color(0xFF0F6E56),
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w500,
+                                            size: 13,
                                           ),
-                                        ),
-                                      ],
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'Comparar',
+                                            style: TextStyle(
+                                              color: Color(0xFF0F6E56),
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          );
-                        }, childCount: _favoritos.length),
+                            );
+                          },
+                          childCount: _favoritos.length > 3
+                              ? 3
+                              : _favoritos.length,
+                        ),
                       ),
 
                 const SliverToBoxAdapter(child: SizedBox(height: 32)),

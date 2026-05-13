@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ecomerk2/data/services/navigation_mode_service.dart';
 import 'package:ecomerk2/data/services/market_api_service.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
+import 'package:ecomerk2/data/services/product_api_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SearchPage extends StatefulWidget {
@@ -194,9 +195,18 @@ class _SearchPageState extends State<SearchPage> {
         }
       } else {
         // Agregar a favoritos
-        // Incluimos productId y notificaciones según docs.md
+        // Codificamos tienda::id en productId para poder recuperar ambos al cargar favoritos
+        // ya que el backend solo guarda {productId, notificaciones}
+        final String rawId = item['id']?.toString().isNotEmpty == true
+            ? item['id'].toString()
+            : (itemLink ?? itemNombre ?? '');
+        final String tiendaTag = (item['tienda'] ?? '').toString();
+        final String compoundId = tiendaTag.isNotEmpty
+            ? '$tiendaTag::$rawId'
+            : rawId;
+
         final productoFavorito = {
-          "productId": itemLink ?? itemNombre ?? '',
+          "productId": compoundId,
           "nombre": itemNombre,
           "precio": "\$${_formatearPrecio(item['precio'] as double)}",
           "tienda": item['tienda'],
@@ -221,6 +231,19 @@ class _SearchPageState extends State<SearchPage> {
                 backgroundColor: Color(0xFF1D9E75),
               ),
             );
+
+            // Enviar precio al historial de precios automáticamente
+            final double? precioNum = item['precio'] is double
+                ? item['precio'] as double
+                : double.tryParse(
+                    item['precio'].toString().replaceAll(r'$', '').replaceAll('.', '').trim(),
+                  );
+            if (precioNum != null && precioNum > 0) {
+              ProductApiService.agregarPrecio(
+                productId: compoundId,
+                precio: precioNum,
+              );
+            }
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Error al agregar a favoritos')),

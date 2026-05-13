@@ -71,8 +71,7 @@ class _ProfilePageState extends State<ProfilePage>
 
   // ─── EDITAR PERFIL ──────────────────────────────────────────
   Future<void> _mostrarDialogoEditar() async {
-    final editNombreCtrl =
-        TextEditingController(text: _nombreController.text);
+    final editNombreCtrl = TextEditingController(text: _nombreController.text);
     final editEmailCtrl = TextEditingController(text: _emailController.text);
     final editPasswordCtrl = TextEditingController();
     final editFechaCtrl = TextEditingController(
@@ -97,40 +96,45 @@ class _ProfilePageState extends State<ProfilePage>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildEditField(editNombreCtrl, 'Nombre',
-                  Icons.person_outline_rounded),
+              _buildEditField(
+                editNombreCtrl,
+                'Nombre',
+                Icons.person_outline_rounded,
+              ),
+              const SizedBox(height: 12),
+              _buildEditField(editEmailCtrl, 'Correo', Icons.email_outlined),
               const SizedBox(height: 12),
               _buildEditField(
-                  editEmailCtrl, 'Correo', Icons.email_outlined),
+                editPasswordCtrl,
+                'Nueva contraseña',
+                Icons.lock_outline_rounded,
+                obscure: true,
+                hint: 'Mínimo 8 caracteres',
+              ),
               const SizedBox(height: 12),
-              _buildEditField(editPasswordCtrl, 'Nueva contraseña',
-                  Icons.lock_outline_rounded,
-                  obscure: true,
-                  hint: 'Mínimo 8 caracteres'),
-              const SizedBox(height: 12),
-              _buildEditField(editFechaCtrl, 'Fecha de nacimiento',
-                  Icons.cake_outlined,
-                  hint: 'yyyy-MM-dd'),
+              _buildEditField(
+                editFechaCtrl,
+                'Fecha de nacimiento',
+                Icons.cake_outlined,
+                hint: 'yyyy-MM-dd',
+              ),
             ],
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              'Cancelar',
-              style: TextStyle(color: Colors.grey),
-            ),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF1D9E75),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-            child:
-                const Text('Guardar', style: TextStyle(color: Colors.white)),
+            child: const Text('Guardar', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -177,7 +181,9 @@ class _ProfilePageState extends State<ProfilePage>
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 ),
                 SizedBox(width: 12),
                 Text('Actualizando perfil...'),
@@ -202,8 +208,9 @@ class _ProfilePageState extends State<ProfilePage>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(res['mensaje'] ?? 'Operación completada'),
-            backgroundColor:
-                res['exito'] == true ? const Color(0xFF1D9E75) : Colors.red,
+            backgroundColor: res['exito'] == true
+                ? const Color(0xFF1D9E75)
+                : Colors.red,
           ),
         );
 
@@ -233,11 +240,12 @@ class _ProfilePageState extends State<ProfilePage>
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              const BorderSide(color: Color(0xFF1D9E75), width: 2),
+          borderSide: const BorderSide(color: Color(0xFF1D9E75), width: 2),
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
     );
   }
@@ -267,20 +275,20 @@ class _ProfilePageState extends State<ProfilePage>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              'Cancelar',
-              style: TextStyle(color: Colors.grey),
-            ),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-            child: const Text('Eliminar',
-                style: TextStyle(color: Colors.white)),
+            child: const Text(
+              'Eliminar',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -299,7 +307,9 @@ class _ProfilePageState extends State<ProfilePage>
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 ),
                 SizedBox(width: 12),
                 Text('Eliminando cuenta...'),
@@ -454,18 +464,23 @@ class _ProfilePageState extends State<ProfilePage>
                                 onTap: _mostrarDialogoEditar,
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 4),
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF1D9E75)
-                                        .withOpacity(0.1),
+                                    color: const Color(
+                                      0xFF1D9E75,
+                                    ).withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: const Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.edit,
-                                          size: 12,
-                                          color: Color(0xFF1D9E75)),
+                                      Icon(
+                                        Icons.edit,
+                                        size: 12,
+                                        color: Color(0xFF1D9E75),
+                                      ),
                                       SizedBox(width: 4),
                                       Text(
                                         'Editar',
@@ -587,16 +602,6 @@ class _ProfilePageState extends State<ProfilePage>
                                   'Favoritos',
                                   const Color(0xFFFFEBF0),
                                   const Color(0xFFD4537E),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _buildStatCard(
-                                  Icons.compare_arrows_rounded,
-                                  '—',
-                                  'Comparaciones',
-                                  const Color(0xFFE1F5EE),
-                                  const Color(0xFF1D9E75),
                                 ),
                               ),
                             ],

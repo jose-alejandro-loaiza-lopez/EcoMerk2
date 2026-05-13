@@ -222,6 +222,7 @@ class ApiService {
       if (token == null) return false;
 
       // Convertir la lista interna al formato que espera el backend
+      // productId ya viene en formato "tienda::id" desde search_page
       final listaFormateada = lista.map((item) {
         if (item is Map) {
           return {

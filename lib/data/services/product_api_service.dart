@@ -15,7 +15,8 @@ class ProductApiService {
   /// Endpoint público (no requiere autenticación).
   /// Devuelve `{ productId, historial: [ {id, productId, precio, fechaGuardado} ] }`
   static Future<Map<String, dynamic>?> obtenerHistorial(
-      String productId) async {
+    String productId,
+  ) async {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/productos/$productId/precios'),
