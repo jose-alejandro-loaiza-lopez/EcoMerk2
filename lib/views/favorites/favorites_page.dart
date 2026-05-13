@@ -156,7 +156,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
       caseSensitive: false,
     );
     String limpio = nombre.replaceAll(stopPatterns, ' ').trim();
-    final palabras = limpio.split(RegExp(r'\s+')).where((p) => p.length > 1).toList();
+    final palabras = limpio
+        .split(RegExp(r'\s+'))
+        .where((p) => p.length > 1)
+        .toList();
     // Tomamos máximo 4 palabras significativas
     final corte = palabras.length > 4 ? 4 : palabras.length;
     return palabras.take(corte).join(' ');
@@ -173,7 +176,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
     try {
       // Simplificar el nombre para mejorar resultados en todas las tiendas
       final querySimplificado = _simplificarBusqueda(producto);
-      final resultados = await MarketApiService.buscarEnTiendas(querySimplificado);
+      final resultados = await MarketApiService.buscarEnTiendas(
+        querySimplificado,
+      );
       if (mounted) {
         final Set<String> tiendasVistas = {};
         final List<dynamic> masBaratosPorTienda = [];
@@ -410,7 +415,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                       Padding(
                                         padding: const EdgeInsets.all(14),
                                         child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
                                           children: [
+                                            // Imagen
                                             if (isMap &&
                                                 (item['imagen']
                                                         ?.toString()
@@ -431,6 +439,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                             else
                                               _buildIconPlaceholder(),
                                             const SizedBox(width: 12),
+
+                                            // Detalles (Expanded para empujar los botones a la derecha)
                                             Expanded(
                                               child: Column(
                                                 crossAxisAlignment:
@@ -476,159 +486,227 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                                 ],
                                               ),
                                             ),
-                                            // Botones de acción (historial + notificaciones)
-                                            // ── Botón historial de precios ──
-                                            GestureDetector(
-                                              onTap: () {
-                                                final pid = isMap
-                                                    ? (item['productId'] ?? item['link'] ?? item['nombre'] ?? '')
-                                                        .toString()
-                                                    : nombreProducto;
-                                                PriceHistoryDialog.show(
-                                                  context,
-                                                  productId: pid,
-                                                  productName: nombreProducto,
-                                                );
-                                              },
-                                              child: Tooltip(
-                                                message: 'Ver historial de precios',
-                                                child: Container(
-                                                  width: 32,
-                                                  height: 32,
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.blue.withOpacity(0.1),
-                                                    borderRadius: BorderRadius.circular(8),
-                                                  ),
-                                                  child: const Icon(
-                                                    Icons.timeline_rounded,
-                                                    color: Color(0xFF3B82F6),
-                                                    size: 18,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            // ── Botón alerta de precio ──
-                                            PriceAlertButton(
-                                              nombreProducto: nombreProducto,
-                                              precioReferencia: isMap &&
-                                                      item['precio'] != null &&
-                                                      item['precio'] != r'$0'
-                                                  ? double.tryParse(
-                                                      item['precio']
-                                                          .toString()
-                                                          .replaceAll(r'$', '')
-                                                          .replaceAll('.', '')
-                                                          .trim(),
-                                                    )
-                                                  : null,
-                                              onToggle: (suscrito) {
-                                                // Sincronizar el campo notificaciones con el backend
-                                                if (isMap && _userId != null) {
-                                                  setState(() {
-                                                    _lista[index]['notificaciones'] = suscrito;
-                                                  });
-                                                  ApiService.actualizarLista(_userId!, _lista);
-                                                }
-                                              },
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      // ── Botón comparar (fila completa debajo) ──
-                                      Padding(
-                                        padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-                                        child: !buscando
-                                            ? GestureDetector(
-                                                onTap: () => precios != null
-                                                    ? setState(() {
-                                                        if (expandido) {
-                                                          _expandidos.remove(
-                                                            nombreProducto,
-                                                          );
-                                                        } else {
-                                                          _expandidos.add(
-                                                            nombreProducto,
-                                                          );
-                                                        }
-                                                      })
-                                                    : _compararPrecios(
-                                                        nombreProducto,
-                                                      ),
-                                                child: Container(
-                                                  width: double.infinity,
-                                                  padding: const EdgeInsets.symmetric(
-                                                    vertical: 8,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: precios != null
-                                                        ? const Color(
-                                                            0xFF1D9E75,
-                                                          ).withOpacity(0.1)
-                                                        : const Color(
-                                                            0xFF1D9E75,
-                                                          ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(8),
-                                                  ),
-                                                  child: Row(
+                                            const SizedBox(width: 8),
+
+                                            // Columna derecha con botones
+                                            IntrinsicWidth(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.stretch,
+                                                children: [
+                                                  // ── Botones superiores (Historial + Alerta) ──
+                                                  Row(
                                                     mainAxisAlignment:
-                                                        MainAxisAlignment.center,
+                                                        MainAxisAlignment
+                                                            .spaceBetween,
                                                     children: [
-                                                      Icon(
-                                                        precios != null
-                                                            ? (expandido
-                                                                  ? Icons
-                                                                        .keyboard_arrow_up
-                                                                  : Icons
-                                                                        .keyboard_arrow_down)
-                                                            : Icons
-                                                                  .compare_arrows,
-                                                        color: precios != null
-                                                            ? const Color(
-                                                                0xFF1D9E75,
-                                                              )
-                                                            : Colors.white,
-                                                        size: 16,
+                                                      GestureDetector(
+                                                        onTap: () {
+                                                          final pid = isMap
+                                                              ? (item['productId'] ??
+                                                                        item['link'] ??
+                                                                        item['nombre'] ??
+                                                                        '')
+                                                                    .toString()
+                                                              : nombreProducto;
+                                                          PriceHistoryDialog.show(
+                                                            context,
+                                                            productId: pid,
+                                                            productName:
+                                                                nombreProducto,
+                                                          );
+                                                        },
+                                                        child: Tooltip(
+                                                          message:
+                                                              'Ver historial de precios',
+                                                          child: Container(
+                                                            width: 32,
+                                                            height: 32,
+                                                            decoration: BoxDecoration(
+                                                              color: Colors.blue
+                                                                  .withValues(
+                                                                    alpha: 0.1,
+                                                                  ),
+                                                              borderRadius:
+                                                                  BorderRadius.circular(
+                                                                    8,
+                                                                  ),
+                                                            ),
+                                                            child: const Icon(
+                                                              Icons
+                                                                  .timeline_rounded,
+                                                              color: Color(
+                                                                0xFF3B82F6,
+                                                              ),
+                                                              size: 18,
+                                                            ),
+                                                          ),
+                                                        ),
                                                       ),
                                                       const SizedBox(width: 6),
-                                                      Text(
-                                                        precios != null
-                                                            ? (expandido
-                                                                  ? 'Ocultar comparación'
-                                                                  : 'Ver comparación de precios')
-                                                            : 'Comparar precios en tiendas',
-                                                        style: TextStyle(
-                                                          color: precios != null
-                                                              ? const Color(
-                                                                  0xFF1D9E75,
-                                                                )
-                                                              : Colors.white,
-                                                          fontSize: 12,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                        ),
+                                                      PriceAlertButton(
+                                                        nombreProducto:
+                                                            nombreProducto,
+                                                        precioReferencia:
+                                                            isMap &&
+                                                                item['precio'] !=
+                                                                    null &&
+                                                                item['precio'] !=
+                                                                    r'$0'
+                                                            ? double.tryParse(
+                                                                item['precio']
+                                                                    .toString()
+                                                                    .replaceAll(
+                                                                      r'$',
+                                                                      '',
+                                                                    )
+                                                                    .replaceAll(
+                                                                      '.',
+                                                                      '',
+                                                                    )
+                                                                    .trim(),
+                                                              )
+                                                            : null,
+                                                        onToggle: (suscrito) {
+                                                          if (isMap &&
+                                                              _userId != null) {
+                                                            setState(() {
+                                                              _lista[index]['notificaciones'] =
+                                                                  suscrito;
+                                                            });
+                                                            ApiService.actualizarLista(
+                                                              _userId!,
+                                                              _lista,
+                                                            );
+                                                          }
+                                                        },
                                                       ),
                                                     ],
                                                   ),
-                                                ),
-                                              )
-                                            : const Center(
-                                                child: Padding(
-                                                  padding: EdgeInsets.symmetric(vertical: 4),
-                                                  child: SizedBox(
-                                                    width: 20,
-                                                    height: 20,
-                                                    child:
-                                                        CircularProgressIndicator(
-                                                          color: Color(
-                                                            0xFF1D9E75,
+                                                  const SizedBox(height: 8),
+
+                                                  // ── Botón comparar (Abajo) ──
+                                                  !buscando
+                                                      ? GestureDetector(
+                                                          onTap: () =>
+                                                              precios != null
+                                                              ? setState(() {
+                                                                  if (expandido) {
+                                                                    _expandidos
+                                                                        .remove(
+                                                                          nombreProducto,
+                                                                        );
+                                                                  } else {
+                                                                    _expandidos.add(
+                                                                      nombreProducto,
+                                                                    );
+                                                                  }
+                                                                })
+                                                              : _compararPrecios(
+                                                                  nombreProducto,
+                                                                ),
+                                                          child: Container(
+                                                            padding:
+                                                                const EdgeInsets.symmetric(
+                                                                  horizontal: 5,
+                                                                  vertical: 6,
+                                                                ),
+                                                            decoration: BoxDecoration(
+                                                              color:
+                                                                  precios !=
+                                                                      null
+                                                                  ? const Color(
+                                                                      0xFF1D9E75,
+                                                                    ).withValues(
+                                                                      alpha:
+                                                                          0.1,
+                                                                    )
+                                                                  : const Color(
+                                                                      0xFF1D9E75,
+                                                                    ),
+                                                              borderRadius:
+                                                                  BorderRadius.circular(
+                                                                    8,
+                                                                  ),
+                                                            ),
+                                                            child: Row(
+                                                              mainAxisAlignment:
+                                                                  MainAxisAlignment
+                                                                      .center,
+                                                              children: [
+                                                                Icon(
+                                                                  precios !=
+                                                                          null
+                                                                      ? (expandido
+                                                                            ? Icons.keyboard_arrow_up
+                                                                            : Icons.keyboard_arrow_down)
+                                                                      : Icons
+                                                                            .compare_arrows,
+                                                                  color:
+                                                                      precios !=
+                                                                          null
+                                                                      ? const Color(
+                                                                          0xFF1D9E75,
+                                                                        )
+                                                                      : Colors
+                                                                            .white,
+                                                                  size: 14,
+                                                                ),
+                                                                const SizedBox(
+                                                                  width: 4,
+                                                                ),
+                                                                Text(
+                                                                  precios !=
+                                                                          null
+                                                                      ? (expandido
+                                                                            ? 'Ocultar'
+                                                                            : 'Mostrar')
+                                                                      : 'Comparar',
+                                                                  style: TextStyle(
+                                                                    color:
+                                                                        precios !=
+                                                                            null
+                                                                        ? const Color(
+                                                                            0xFF1D9E75,
+                                                                          )
+                                                                        : Colors
+                                                                              .white,
+                                                                    fontSize:
+                                                                        10,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w600,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
                                                           ),
-                                                          strokeWidth: 2,
+                                                        )
+                                                      : const Center(
+                                                          child: SizedBox(
+                                                            height: 26,
+                                                            width: 26,
+                                                            child: Padding(
+                                                              padding:
+                                                                  EdgeInsets.all(
+                                                                    4.0,
+                                                                  ),
+                                                              child:
+                                                                  CircularProgressIndicator(
+                                                                    color: Color(
+                                                                      0xFF1D9E75,
+                                                                    ),
+                                                                    strokeWidth:
+                                                                        2,
+                                                                  ),
+                                                            ),
+                                                          ),
                                                         ),
-                                                  ),
-                                                ),
+                                                ],
                                               ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
 
                                       // Panel de comparación expandible
