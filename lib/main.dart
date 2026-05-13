@@ -6,11 +6,16 @@ import 'package:ecomerk2/data/services/user_api_service.dart';
 import 'package:ecomerk2/data/services/security_manager.dart';
 import 'package:ecomerk2/data/services/notification_service.dart';
 import 'package:ecomerk2/core/workers/price_check_worker.dart';
+import 'package:ecomerk2/core/constants/env_config.dart';
 import 'routes/app_routes.dart';
 import 'themes/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Cargar variables de entorno (.env)
+  await EnvConfig.init();
+
   await NavigationModeService.instance.load();
 
   // Inicializar notificaciones locales

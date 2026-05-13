@@ -2,10 +2,10 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'user_api_service.dart';
 import 'security_manager.dart';
+import 'package:ecomerk2/core/constants/env_config.dart';
 
 class ChatApiService {
-  static const String baseUrl =
-      'https://usuarios-bd-production.up.railway.app/api/v1';
+  static String get baseUrl => EnvConfig.baseUrl;
 
   static http.Client get _client {
     return SecurityManager().client ?? http.Client();

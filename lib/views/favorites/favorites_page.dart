@@ -5,6 +5,7 @@ import 'package:ecomerk2/data/services/user_api_service.dart';
 import 'package:ecomerk2/data/services/market_api_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'widgets/price_alert_button.dart';
+import 'widgets/price_history_dialog.dart';
 
 class FavoritesPage extends StatefulWidget {
   const FavoritesPage({super.key});
@@ -377,6 +378,37 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                               ),
                                             ),
                                             // Botones de acción
+                                            // ── Botón historial de precios ──
+                                            GestureDetector(
+                                              onTap: () {
+                                                final pid = isMap
+                                                    ? (item['productId'] ?? item['link'] ?? item['nombre'] ?? '')
+                                                        .toString()
+                                                    : nombreProducto;
+                                                PriceHistoryDialog.show(
+                                                  context,
+                                                  productId: pid,
+                                                  productName: nombreProducto,
+                                                );
+                                              },
+                                              child: Tooltip(
+                                                message: 'Ver historial de precios',
+                                                child: Container(
+                                                  width: 32,
+                                                  height: 32,
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.blue.withOpacity(0.1),
+                                                    borderRadius: BorderRadius.circular(8),
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.timeline_rounded,
+                                                    color: Color(0xFF3B82F6),
+                                                    size: 18,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
                                             // ── Botón alerta de precio ──
                                             PriceAlertButton(
                                               nombreProducto: nombreProducto,
@@ -391,6 +423,15 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                                           .trim(),
                                                     )
                                                   : null,
+                                              onToggle: (suscrito) {
+                                                // Sincronizar el campo notificaciones con el backend
+                                                if (isMap && _userId != null) {
+                                                  setState(() {
+                                                    _lista[index]['notificaciones'] = suscrito;
+                                                  });
+                                                  ApiService.actualizarLista(_userId!, _lista);
+                                                }
+                                              },
                                             ),
                                             const SizedBox(width: 6),
                                             // ── Botón comparar ──

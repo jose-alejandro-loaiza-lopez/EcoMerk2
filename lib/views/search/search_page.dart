@@ -194,12 +194,15 @@ class _SearchPageState extends State<SearchPage> {
         }
       } else {
         // Agregar a favoritos
+        // Incluimos productId y notificaciones según docs.md
         final productoFavorito = {
+          "productId": itemLink ?? itemNombre ?? '',
           "nombre": itemNombre,
           "precio": "\$${_formatearPrecio(item['precio'] as double)}",
           "tienda": item['tienda'],
           "imagen": item['imagen'],
           "link": itemLink,
+          "notificaciones": false,
         };
 
         favoritosActuales.add(productoFavorito);

@@ -69,6 +69,273 @@ class _ProfilePageState extends State<ProfilePage>
     if (mounted) context.go('/login');
   }
 
+  // ─── EDITAR PERFIL ──────────────────────────────────────────
+  Future<void> _mostrarDialogoEditar() async {
+    final editNombreCtrl =
+        TextEditingController(text: _nombreController.text);
+    final editEmailCtrl = TextEditingController(text: _emailController.text);
+    final editPasswordCtrl = TextEditingController();
+    final editFechaCtrl = TextEditingController(
+      text: _usuario?['fechaNacimiento'] ?? '',
+    );
+
+    final resultado = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.edit_rounded, color: Color(0xFF1D9E75), size: 22),
+            SizedBox(width: 8),
+            Text(
+              'Editar perfil',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildEditField(editNombreCtrl, 'Nombre',
+                  Icons.person_outline_rounded),
+              const SizedBox(height: 12),
+              _buildEditField(
+                  editEmailCtrl, 'Correo', Icons.email_outlined),
+              const SizedBox(height: 12),
+              _buildEditField(editPasswordCtrl, 'Nueva contraseña',
+                  Icons.lock_outline_rounded,
+                  obscure: true,
+                  hint: 'Mínimo 8 caracteres'),
+              const SizedBox(height: 12),
+              _buildEditField(editFechaCtrl, 'Fecha de nacimiento',
+                  Icons.cake_outlined,
+                  hint: 'yyyy-MM-dd'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1D9E75),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child:
+                const Text('Guardar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (resultado == true) {
+      final id = await ApiService.obtenerUserId();
+      if (id == null) return;
+
+      // Validaciones básicas
+      if (editNombreCtrl.text.trim().isEmpty ||
+          editEmailCtrl.text.trim().isEmpty ||
+          editPasswordCtrl.text.isEmpty ||
+          editFechaCtrl.text.trim().isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Todos los campos son obligatorios'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      if (editPasswordCtrl.text.length < 8) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('La contraseña debe tener al menos 8 caracteres'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
+                ),
+                SizedBox(width: 12),
+                Text('Actualizando perfil...'),
+              ],
+            ),
+            backgroundColor: Color(0xFF1D9E75),
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+
+      final res = await ApiService.actualizarPerfil(
+        id: id,
+        nombre: editNombreCtrl.text.trim(),
+        email: editEmailCtrl.text.trim(),
+        password: editPasswordCtrl.text,
+        fechaNacimiento: editFechaCtrl.text.trim(),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['mensaje'] ?? 'Operación completada'),
+            backgroundColor:
+                res['exito'] == true ? const Color(0xFF1D9E75) : Colors.red,
+          ),
+        );
+
+        if (res['exito'] == true) {
+          // Recargar datos del perfil
+          setState(() => _cargando = true);
+          await _cargarPerfil();
+        }
+      }
+    }
+  }
+
+  Widget _buildEditField(
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    bool obscure = false,
+    String? hint,
+  }) {
+    return TextField(
+      controller: controller,
+      obscureText: obscure,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: Icon(icon, color: const Color(0xFF1D9E75), size: 20),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              const BorderSide(color: Color(0xFF1D9E75), width: 2),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
+    );
+  }
+
+  // ─── ELIMINAR CUENTA ────────────────────────────────────────
+  Future<void> _eliminarCuenta() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 24),
+            SizedBox(width: 8),
+            Text(
+              'Eliminar cuenta',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        content: const Text(
+          '¿Estás seguro de que deseas eliminar tu cuenta?\n\n'
+          'Esta acción es irreversible. Se eliminarán todos tus datos, '
+          'favoritos y chat.',
+          style: TextStyle(color: Color(0xFF555555)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Eliminar',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      final id = await ApiService.obtenerUserId();
+      if (id == null) return;
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
+                ),
+                SizedBox(width: 12),
+                Text('Eliminando cuenta...'),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+
+      final res = await ApiService.eliminarCuenta(id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+        if (res['exito'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Cuenta eliminada correctamente'),
+              backgroundColor: Color(0xFF1D9E75),
+            ),
+          );
+          context.go('/login');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(res['mensaje'] ?? 'Error al eliminar la cuenta'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final usarMenuLateral =
@@ -88,6 +355,11 @@ class _ProfilePageState extends State<ProfilePage>
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_rounded, color: Color(0xFF9FE1CB)),
+            tooltip: 'Editar perfil',
+            onPressed: _mostrarDialogoEditar,
+          ),
           IconButton(
             icon: const Icon(Icons.logout, color: Color(0xFF9FE1CB)),
             onPressed: _cerrarSesion,
@@ -167,13 +439,47 @@ class _ProfilePageState extends State<ProfilePage>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Información de la cuenta',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF2C2C2A),
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Información de la cuenta',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF2C2C2A),
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: _mostrarDialogoEditar,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF1D9E75)
+                                        .withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.edit,
+                                          size: 12,
+                                          color: Color(0xFF1D9E75)),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Editar',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Color(0xFF1D9E75),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 16),
                           _buildInfoRow(
@@ -316,6 +622,29 @@ class _ProfilePageState extends State<ProfilePage>
                         label: const Text(
                           'Cerrar sesión',
                           style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Eliminar cuenta
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        onPressed: _eliminarCuenta,
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Eliminar mi cuenta',
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ),
