@@ -14,20 +14,18 @@ class ChatApiService {
   // Obtener historial de mensajes (paginado por cursor)
   static Future<Map<String, dynamic>?> obtenerMensajes({int? antes}) async {
     try {
-      final token = await ApiService.obtenerTokenValido();
-      if (token == null) return null;
-
       String url = '$baseUrl/chat/mensajes';
       if (antes != null) url += '?antes=$antes';
 
-      final response = await _client.get(
+      final response = await ApiService.ejecutarConAuth((token) => _client.get(
         Uri.parse(url),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
-      );
+      ));
 
+      if (response == null) return null;
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
@@ -43,19 +41,16 @@ class ChatApiService {
     required bool esIa,
   }) async {
     try {
-      final token = await ApiService.obtenerTokenValido();
-      if (token == null) return false;
-
-      final response = await _client.post(
+      final response = await ApiService.ejecutarConAuth((token) => _client.post(
         Uri.parse('$baseUrl/chat/mensajes'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
         body: jsonEncode({'contenido': contenido, 'esIa': esIa}),
-      );
+      ));
 
-      return response.statusCode == 201;
+      return response?.statusCode == 201;
     } catch (e) {
       return false;
     }
@@ -66,10 +61,7 @@ class ChatApiService {
     List<Map<String, dynamic>> favoritos,
   ) async {
     try {
-      final token = await ApiService.obtenerTokenValido();
-      if (token == null) return null;
-
-      final response = await _client.post(
+      final response = await ApiService.ejecutarConAuth((token) => _client.post(
         Uri.parse('$baseUrl/chat/ia'),
         headers: {
           'Authorization': 'Bearer $token',
@@ -79,8 +71,9 @@ class ChatApiService {
           'mensaje': mensaje,
           'favoritos': favoritos,
         }),
-      );
+      ));
 
+      if (response == null) return null;
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data['respuesta'] as String?;

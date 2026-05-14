@@ -78,7 +78,7 @@ class StorageService {
     if (timestamp == null) return false;
     final guardadoEn = DateTime.fromMillisecondsSinceEpoch(timestamp);
     final diferencia = DateTime.now().difference(guardadoEn);
-    return diferencia.inHours < 23;
+    return diferencia.inMinutes < 12;
   }
 
   // ─── USUARIO ID ─────────────────────────────────────────────
