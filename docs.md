@@ -2,8 +2,8 @@
 **Base URL**: `https://usuarios-bd-production.up.railway.app/api/v1`
 
 **Formato de autorización**: incluir header `Authorization: Bearer <ACCESS_TOKEN>` para endpoints que requieran autenticación.  
-- `ACCESS_TOKEN` = JWT (expiración por defecto: 1 día).  
-- `REFRESH_TOKEN` = token largo retornado por el servidor (expiración por defecto: 7 días).
+- `ACCESS_TOKEN` = JWT (expiración por defecto: 15 minutos).  
+- `REFRESH_TOKEN` = token largo retornado por el servidor (expiración por defecto: 1 día).
 
 **Paginación / tamaño**: bloques de mensajes y páginas usan tamaño fijo 10 (constante `CANTIDAD_POR_PAGINA = 10`).
 
@@ -115,12 +115,12 @@ Base: `/usuarios`
     - `usuario`: usuario con `favoritos` sincronizados
     - `mensaje`: confirmación
 
-**3) Chat privado por usuario (IA)**
+**3) Chat con IA (EcoIA)**
 Base: `/chat`
 
-- Resumen conceptual: cada usuario tiene un chat privado con la IA. Los mensajes se guardan por `usuario_id`. No hay timestamps; el orden y paginación se usa por `id` (autoincremental). Los mensajes guardan `contenido` y `es_ia` (boolean).
+- Resumen conceptual: cada usuario tiene un chat privado con EcoIA. Los mensajes se guardan por `usuario_id`. No hay timestamps; el orden y paginación se usa por `id` (autoincremental). Los mensajes guardan `contenido` y `es_ia` (boolean). La API key de OpenRouter está **solo en el servidor** — el cliente nunca la maneja.
 
-- **GET /chat/mensajes**
+- **GET /chat/mensajes** — Obtener historial de mensajes (paginado por cursor)
   - Autenticación: SÍ (cualquier usuario autenticado)
   - Query params:
     - `antes` (long, opcional) — cursor: devuelve mensajes con `id < antes` (mensajes anteriores al cursor)
@@ -148,22 +148,36 @@ Base: `/chat`
       -H "Authorization: Bearer <ACCESS_TOKEN>"
     ```
 
-- **POST /chat/mensajes**
+- **POST /chat/ia** — Enviar mensaje a la IA y guardar conversación
   - Autenticación: SÍ
-  - Request JSON (`MensajeChatRequest`):
-    - `contenido` (string) — obligatorio
-    - `esIa` (boolean) — indica si el mensaje viene de la IA
-  - Comportamiento importante:
-    - `usuarioId` se infiere del token — **NO** enviar `usuarioId` desde el cliente.
-  - Response 201:
-    - `mensaje`: "Mensaje guardado con éxito"
-    - `datos`: objeto del `MensajeChat` guardado (`id`, `usuarioId`, `contenido`, `esIa`)
+  - Request JSON (`ChatIaRequest`):
+    - `mensaje` (string) — obligatorio, texto del usuario
+    - `favoritos` (array de objetos, opcional) — productos favoritos del usuario para contexto. Cada objeto:
+      - `nombre` (string) — nombre del producto
+      - `tienda` (string) — tienda donde se encuentra
+      - `precio` (string/number) — precio del producto
+  - Comportamiento:
+    1. Guarda el mensaje del usuario en el historial (`esIa = false`)
+    2. Construye el system prompt con los favoritos recibidos
+    3. Envía la petición a OpenRouter con la API key del servidor
+    4. Guarda la respuesta de la IA en el historial (`esIa = true`)
+    5. Devuelve la respuesta al cliente
+  - Response 200:
+    - `respuesta` (string) — texto formateado en Markdown con la respuesta de EcoIA
+  - Response 500 (si OpenRouter falla):
+    - `mensaje`: "Error al obtener respuesta de la IA"
   - Ejemplo:
     ```bash
-    curl -X POST http://localhost:8080/api/v1/chat/mensajes \
+    curl -X POST http://localhost:8080/api/v1/chat/ia \
       -H "Authorization: Bearer <ACCESS_TOKEN>" \
       -H "Content-Type: application/json" \
-      -d '{"contenido":"Hola IA, ¿qué debo hacer?","esIa":false}'
+      -d '{
+        "mensaje": "¿Qué puedo cocinar con huevos y arroz?",
+        "favoritos": [
+          {"nombre": "Arroz Diana", "tienda": "Éxito", "precio": "2500"},
+          {"nombre": "Huevos Santa Reyes", "tienda": "Carulla", "precio": "12000"}
+        ]
+      }'
     ```
 
 **4) Productos (historial de precios)**  
