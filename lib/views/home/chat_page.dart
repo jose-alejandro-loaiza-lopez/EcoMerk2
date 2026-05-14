@@ -261,10 +261,6 @@ class _ChatPageState extends State<ChatPage>
       _mostrarMenuRapido = false;
     });
 
-    await ChatApiService.guardarMensaje(contenido: texto, esIa: false);
-
-    // La IA corre en background; la respuesta se guarda en el backend
-    // aunque el widget se destruya al cambiar de ventana.
     ChatPage._iniciarProcesamiento();
     _procesarRespuestaIA(texto);
   }
@@ -275,11 +271,6 @@ class _ChatPageState extends State<ChatPage>
       final textoRespuesta =
           respuesta ??
           'Lo siento, no pude procesar tu consulta. Intenta de nuevo.';
-
-      await ChatApiService.guardarMensaje(
-        contenido: textoRespuesta,
-        esIa: true,
-      );
 
       if (mounted) {
         setState(() {
