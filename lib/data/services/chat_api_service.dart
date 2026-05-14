@@ -73,7 +73,9 @@ class ChatApiService {
       '- Usa listas con guiones para ingredientes o pasos.\n'
       '- Mantén un tono amable, natural y colombiano.\n'
       '- No tienes historial chat\n'
-      '- Si recomiendas productos, prioriza los favoritos del usuario.',
+      '- Si recomiendas productos, prioriza los favoritos del usuario.\n'
+      '- Si el usuario pide recetas, recomiendalas por mayor coincidencia con la lista de favoritos del usuario.\n'
+      '- Si el usuario no tiene favoritos, recomienda cualquier receta.',
     );
 
     if (favoritos.isNotEmpty) {
