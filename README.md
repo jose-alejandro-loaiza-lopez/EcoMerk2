@@ -21,10 +21,6 @@
 | IA | OpenRouter (GPT-4 / Gemini) |
 | Cifrado | RSA + AES híbrido |
 
-## Capturas de pantalla
-
-_(Agregar aquí)_
-
 ## Instalación
 
 1. Descarga el APK desde la sección [Releases](https://github.com/jose-alejandro-loaiza-lopez/EcoMerk2/releases).
