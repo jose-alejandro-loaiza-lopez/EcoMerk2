@@ -9,7 +9,7 @@
 - **Lista de compras / Favoritos** — Guarda productos, recibe el mejor precio disponible y compáralos entre tiendas con un solo toque.
 - **Alertas de precio** — Notificaciones locales cuando un producto suscrito baja al menos un 5%. Revisión automática cada 6 horas en segundo plano.
 - **Historial de precios** — Línea de tiempo con evolución de precios, tendencias y cambios porcentuales.
-- **Cifrado extremo a extremo** — RSA-2048 + AES-256-CBC en todas las comunicaciones con el backend.
+- **Cifrado extremo a extremo** — RSA-2048 + AES-128-CBC en todas las comunicaciones con el backend.
 
 ## Stack
 
@@ -19,7 +19,7 @@
 | Backend | Spring Boot — Railway |
 | Base de datos | PostgreSQL |
 | IA | OpenRouter (GPT-4 / Gemini) |
-| Cifrado | RSA + AES híbrido |
+| Cifrado | RSA-2048 + AES-128-CBC híbrido |
 
 ## Instalación
 

@@ -528,14 +528,14 @@ Base: `/productos`
 
 ## 5. Cifrado extremo a extremo (Obligatorio)
 
-> ⚠️ **Toda comunicación con body (request y response) debe ir cifrada.** Si envías JSON plano, el `DecryptRequestBodyAdvice` del backend no podrá procesarlo y responderá con error 500.
+> ⚠️ **Toda comunicación con body (request y response) debe ir cifrada.** Si envías JSON plano, el backend responderá con **400 Bad Request** (`CifradoRequeridoException`).
 
 ### Flujo
 
 1. **Obtener clave pública** → `GET /usuarios/public-key` (única respuesta en texto plano)
-2. El cliente genera una **clave AES-256** aleatoria y un **IV** (16 bytes)
+2. El cliente genera una **clave AES de 128 bits** (16 bytes) aleatoria y un **IV** (16 bytes)
 3. El cliente cifra la clave AES con RSA (clave pública, OAEP/SHA-256) → `encryptedAesKey` (Base64)
-4. El cliente cifra el payload JSON con AES-256-CBC → `encryptedData` (Base64)
+4. El cliente cifra el payload JSON con AES-128-CBC → `encryptedData` (Base64)
 5. Se envía al servidor:
    ```json
    {
