@@ -19,7 +19,7 @@ class StorageService {
   StorageService._();
   static final StorageService instance = StorageService._();
 
-  // Android: encryptedSharedPreferences para cifrado AES-256
+  // Android: encryptedSharedPreferences para cifrado AES-128
   static const _secureStorage = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
