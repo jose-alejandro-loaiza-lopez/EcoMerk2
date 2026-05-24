@@ -2,10 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:ecomerk2/data/services/navigation_mode_service.dart';
 import 'package:ecomerk2/data/services/chat_api_service.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
 import 'package:ecomerk2/data/services/pruduct_details_service.dart';
+import 'package:ecomerk2/data/services/market_api_service.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -39,6 +41,7 @@ class _ChatPageState extends State<ChatPage>
   final List<Map<String, dynamic>> _mensajes = [];
   final List<Map<String, dynamic>> _favoritos = [];
   bool _cargando = false;
+  bool _buscandoEnTiendas = false;
   bool _cargandoHistorial = true;
   bool _hayMas = false;
   bool _cargandoMas = false;
@@ -267,16 +270,69 @@ class _ChatPageState extends State<ChatPage>
 
   Future<void> _procesarRespuestaIA(String texto) async {
     try {
-      final respuesta = await ChatApiService.preguntarIA(texto, _favoritos);
-      final textoRespuesta =
-          respuesta ??
-          'Lo siento, no pude procesar tu consulta. Intenta de nuevo.';
+      // FASE 1: enviar mensaje a la IA
+      final data = await ChatApiService.preguntarIA(texto, _favoritos);
 
-      if (mounted) {
-        setState(() {
-          _mensajes.insert(0, {'rol': 'ia', 'texto': textoRespuesta});
-          _cargando = false;
-        });
+      if (data == null) {
+        if (mounted) {
+          setState(() {
+            _mensajes.insert(0, {
+              'rol': 'ia',
+              'texto': 'Lo siento, no pude procesar tu consulta. Intenta de nuevo.',
+            });
+            _cargando = false;
+          });
+        }
+        return;
+      }
+
+      if (data['action'] == 'search') {
+        // La IA quiere buscar en tiendas → ejecutar FASE 2
+        final query = data['query'] as String? ?? '';
+        final toolCallId = data['toolCallId'] as String? ?? '';
+        final arguments = data['arguments'] as String? ?? '';
+
+        if (mounted) setState(() => _buscandoEnTiendas = true);
+
+        final resultados = await MarketApiService.buscarEnTiendas(query);
+
+        final resultadosMapeados = resultados.map((r) => {
+          'nombre': r['nombre'],
+          'tienda': r['tienda'],
+          'precio': r['precio'],
+          'link': r['link'],
+        }).toList();
+
+        if (mounted) setState(() => _buscandoEnTiendas = false);
+
+        final data2 = await ChatApiService.reenviarConResultados(
+          mensaje: texto,
+          favoritos: _favoritos,
+          resultadosBusqueda: resultadosMapeados,
+          toolCallId: toolCallId,
+          arguments: arguments,
+        );
+
+        final textoRespuesta = data2?['respuesta'] as String? ??
+            'Lo siento, no pude procesar tu consulta. Intenta de nuevo.';
+
+        if (mounted) {
+          setState(() {
+            _mensajes.insert(0, {'rol': 'ia', 'texto': textoRespuesta});
+            _cargando = false;
+          });
+        }
+      } else {
+        // Respuesta normal de la IA
+        final textoRespuesta = data['respuesta'] as String? ??
+            'Lo siento, no pude procesar tu consulta. Intenta de nuevo.';
+
+        if (mounted) {
+          setState(() {
+            _mensajes.insert(0, {'rol': 'ia', 'texto': textoRespuesta});
+            _cargando = false;
+          });
+        }
       }
     } finally {
       ChatPage._completarProcesamiento();
@@ -338,9 +394,13 @@ class _ChatPageState extends State<ChatPage>
                   ),
                 ),
                 Text(
-                  _cargando ? 'Escribiendo...' : 'EcoMerk2',
+                  _buscandoEnTiendas
+                      ? 'Buscando en tiendas...'
+                      : _cargando
+                      ? 'Escribiendo...'
+                      : 'EcoMerk2',
                   style: TextStyle(
-                    color: _cargando
+                    color: _buscandoEnTiendas || _cargando
                         ? const Color(0xFFFFE082)
                         : const Color(0xFF9FE1CB),
                     fontSize: 11,
@@ -386,6 +446,32 @@ class _ChatPageState extends State<ChatPage>
                   Text(
                     'Cargando historial...',
                     style: TextStyle(color: Color(0xFF0F6E56), fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+
+          // Banner "Buscando en tiendas..." (FASE 2)
+          if (_buscandoEnTiendas)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              color: const Color(0xFFE3F2FD),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF1976D2),
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Buscando en tiendas...',
+                    style: TextStyle(color: Color(0xFF1976D2), fontSize: 12),
                   ),
                 ],
               ),
@@ -826,6 +912,14 @@ class _ChatPageState extends State<ChatPage>
                             fontSize: 14,
                           ),
                         ),
+                        onTapLink: (text, href, title) {
+                          if (href != null) {
+                            launchUrl(
+                              Uri.parse(href),
+                              mode: LaunchMode.externalApplication,
+                            );
+                          }
+                        },
                       ),
               ),
             ),
@@ -845,11 +939,15 @@ class _ChatPageState extends State<ChatPage>
             width: 30,
             height: 30,
             decoration: BoxDecoration(
-              color: const Color(0xFF1D9E75),
+              color: _buscandoEnTiendas
+                  ? const Color(0xFF1976D2)
+                  : const Color(0xFF1D9E75),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(
-              Icons.auto_awesome_rounded,
+            child: Icon(
+              _buscandoEnTiendas
+                  ? Icons.shopping_cart_rounded
+                  : Icons.auto_awesome_rounded,
               color: Colors.white,
               size: 16,
             ),
@@ -861,31 +959,54 @@ class _ChatPageState extends State<ChatPage>
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: AnimatedBuilder(
-              animation: _dotController,
-              builder: (context, child) {
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: List.generate(3, (i) {
-                    final delay = i / 3;
-                    final value = ((_dotController.value - delay) % 1.0).abs();
-                    return Container(
-                      width: 7,
-                      height: 7,
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
-                      decoration: BoxDecoration(
-                        color: Color.lerp(
-                          Colors.grey[300],
-                          const Color(0xFF1D9E75),
-                          value < 0.5 ? value * 2 : (1 - value) * 2,
+            child: _buscandoEnTiendas
+                ? const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF1976D2),
                         ),
-                        shape: BoxShape.circle,
                       ),
-                    );
-                  }),
-                );
-              },
-            ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Buscando en tiendas...',
+                        style: TextStyle(
+                          color: Color(0xFF1976D2),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  )
+                : AnimatedBuilder(
+                    animation: _dotController,
+                    builder: (context, child) {
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: List.generate(3, (i) {
+                          final delay = i / 3;
+                          final value = ((_dotController.value - delay) % 1.0).abs();
+                          return Container(
+                            width: 7,
+                            height: 7,
+                            margin: const EdgeInsets.symmetric(horizontal: 2),
+                            decoration: BoxDecoration(
+                              color: Color.lerp(
+                                Colors.grey[300],
+                                const Color(0xFF1D9E75),
+                                value < 0.5 ? value * 2 : (1 - value) * 2,
+                              ),
+                              shape: BoxShape.circle,
+                            ),
+                          );
+                        }),
+                      );
+                    },
+                  ),
           ),
         ],
       ),

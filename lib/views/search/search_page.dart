@@ -4,6 +4,7 @@ import 'package:ecomerk2/data/services/navigation_mode_service.dart';
 import 'package:ecomerk2/data/services/market_api_service.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
 import 'package:ecomerk2/data/services/product_api_service.dart';
+import 'package:ecomerk2/data/services/local_inference_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SearchPage extends StatefulWidget {
@@ -224,8 +225,19 @@ class _SearchPageState extends State<SearchPage> {
         }
       } else {
         // Agregar a favoritos
-        // Codificamos tienda::id en productId para poder recuperar ambos al cargar favoritos
-        // ya que el backend solo guarda {productId, notificaciones}
+
+        bool? hasProtein;
+        String? proteinLabel;
+        try {
+          final imageUrl = item['imagen']?.toString() ?? '';
+          if (imageUrl.isNotEmpty) {
+            hasProtein = await LocalInferenceService.hasProtein(imageUrl);
+            proteinLabel = hasProtein ? '🥩 Con proteína' : '🌱 Sin proteína';
+          }
+        } catch (e) {
+          debugPrint('Protein inference failed for $itemNombre: $e');
+          proteinLabel = '⚠️ Inferencia falló';
+        }
 
         final productoFavorito = {
           "productId": compoundId,
@@ -235,6 +247,7 @@ class _SearchPageState extends State<SearchPage> {
           "imagen": item['imagen'],
           "link": itemLink,
           "notificaciones": false,
+          if (hasProtein != null) "hasProtein": hasProtein,
         };
 
         favoritosActuales.add(productoFavorito);
@@ -249,9 +262,13 @@ class _SearchPageState extends State<SearchPage> {
               );
             });
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Producto agregado a favoritos'),
-                backgroundColor: Color(0xFF1D9E75),
+              SnackBar(
+                content: Text(
+                  proteinLabel != null
+                      ? 'Agregado · $proteinLabel'
+                      : 'Producto agregado a favoritos',
+                ),
+                backgroundColor: const Color(0xFF1D9E75),
               ),
             );
 

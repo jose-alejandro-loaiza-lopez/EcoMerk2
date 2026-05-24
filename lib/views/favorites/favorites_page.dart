@@ -483,10 +483,58 @@ class _FavoritesPageState extends State<FavoritesPage> {
                                                             FontWeight.w600,
                                                       ),
                                                     ),
-                                                ],
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
+                                                  if (isMap &&
+                                                      item['hasProtein'] != null)
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                              top: 4),
+                                                      child: Row(
+                                                        children: [
+                                                          Container(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                              horizontal: 8,
+                                                              vertical: 2,
+                                                            ),
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              color: item['hasProtein']
+                                                                      == true
+                                                                  ? const Color(
+                                                                      0xFF1D9E75)
+                                                                  : Colors
+                                                                      .grey
+                                                                      .shade300,
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          10),
+                                                            ),
+                                                            child: Text(
+                                                              item['hasProtein'] ==
+                                                                      true
+                                                                  ? '🥩 Proteína'
+                                                                  : 'Sin proteína',
+                                                              style:
+                                                                  const TextStyle(
+                                                                fontSize: 11,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                                color: Colors
+                                                                    .white,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                 ],
+                                               ),
+                                             ),
+                                             const SizedBox(width: 8),
 
                                             // Columna derecha con botones
                                             IntrinsicWidth(
