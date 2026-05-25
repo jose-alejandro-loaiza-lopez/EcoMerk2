@@ -91,6 +91,7 @@ class ChatApiService {
     required List<Map<String, dynamic>> resultadosBusqueda,
     required String toolCallId,
     required String arguments,
+    required List<Map<String, dynamic>> historialBusquedas,
   }) async {
     try {
       final response = await ApiService.ejecutarConAuth((token) => _client.post(
@@ -105,6 +106,7 @@ class ChatApiService {
           'resultadosBusqueda': resultadosBusqueda,
           'toolCallId': toolCallId,
           'arguments': arguments,
+          'historialBusquedas': historialBusquedas,
         }),
       ));
 

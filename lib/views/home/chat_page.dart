@@ -28,12 +28,19 @@ class ChatPage extends StatefulWidget {
     _completerProcesamiento = null;
   }
 
+  /// Notifica al bottom nav cuando hay una respuesta pendiente que el
+  /// usuario no ha visto porque salió de la vista del chat.
+  static final ValueNotifier<bool> respuestaPendiente = ValueNotifier(false);
+
   @override
   State<ChatPage> createState() => _ChatPageState();
 }
 
 class _ChatPageState extends State<ChatPage>
     with SingleTickerProviderStateMixin {
+  static int _ultimoIdInstancia = 0;
+  int _idInstancia = 0;
+
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
@@ -98,6 +105,8 @@ class _ChatPageState extends State<ChatPage>
   @override
   void initState() {
     super.initState();
+    _idInstancia = ++_ultimoIdInstancia;
+    ChatPage.respuestaPendiente.value = false;
     _dotController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
@@ -292,6 +301,7 @@ class _ChatPageState extends State<ChatPage>
         var query = data['query'] as String? ?? '';
         var toolCallId = data['toolCallId'] as String? ?? '';
         var arguments = data['arguments'] as String? ?? '';
+        final historialBusquedas = <Map<String, dynamic>>[];
 
         while (true) {
           if (mounted) setState(() => _buscandoEnTiendas = true);
@@ -317,6 +327,7 @@ class _ChatPageState extends State<ChatPage>
             resultadosBusqueda: resultadosMapeados,
             toolCallId: toolCallId,
             arguments: arguments,
+            historialBusquedas: historialBusquedas,
           );
 
           if (response == null || response['action'] != 'search') {
@@ -332,6 +343,13 @@ class _ChatPageState extends State<ChatPage>
             }
             return;
           }
+
+          // Acumular ronda actual antes de la siguiente iteración
+          historialBusquedas.add({
+            'toolCallId': toolCallId,
+            'arguments': arguments,
+            'resultadosBusqueda': resultadosMapeados,
+          });
 
           // La IA pide otra búsqueda: continuar el loop
           query = response['query'] as String? ?? '';
@@ -353,6 +371,9 @@ class _ChatPageState extends State<ChatPage>
       }
     } finally {
       ChatPage._completarProcesamiento();
+      if (!mounted) {
+        ChatPage.respuestaPendiente.value = true;
+      }
     }
   }
 
