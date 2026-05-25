@@ -7,14 +7,18 @@ class LocalInferenceService {
   static OnnxRuntime? _ort;
   static OrtSession? _session;
   static bool _initialized = false;
+  static bool _isAvailable = false;
 
   static const String _modelAsset = 'assets/models/mobilenet_v3.onnx';
   static const int _inputSize = 224;
   static const List<double> _mean = [0.485, 0.456, 0.406];
   static const List<double> _std = [0.229, 0.224, 0.225];
 
+  static bool get isAvailable => _isAvailable;
+
   static Future<void> init() async {
     if (_initialized) return;
+    _initialized = true;
     try {
       _ort = OnnxRuntime();
       _session = await _ort!.createSessionFromAsset(
@@ -28,25 +32,23 @@ class LocalInferenceService {
       debugPrint('Inputs: $inputInfo');
       debugPrint('Outputs: $outputInfo');
 
-      _initialized = true;
+      _isAvailable = true;
     } catch (e) {
       debugPrint('LocalInferenceService.init: $e');
-      rethrow;
+      _isAvailable = false;
     }
   }
 
   static Future<bool> hasProtein(String imageUrl) async {
-    if (!_initialized) await init();
-    if (_session == null) {
-      throw StateError('ONNX session not initialized');
-    }
-
-    final bytes = await _downloadImage(imageUrl);
-    if (bytes.isEmpty) throw Exception('Empty image downloaded');
-
-    final inputTensor = await _preprocess(bytes);
+    if (!_isAvailable) return false;
+    if (_session == null) return false;
 
     try {
+      final bytes = await _downloadImage(imageUrl);
+      if (bytes.isEmpty) return false;
+
+      final inputTensor = await _preprocess(bytes);
+
       final inputName = _session!.inputNames.isNotEmpty
           ? _session!.inputNames.first
           : 'input';
@@ -54,7 +56,9 @@ class LocalInferenceService {
       final outputName = _session!.outputNames.isNotEmpty
           ? _session!.outputNames.first
           : 'output';
-      final outputTensor = outputs[outputName]!;
+      final outputTensor = outputs[outputName];
+      if (outputTensor == null) return false;
+
       final logits = await outputTensor.asFlattenedList();
 
       debugPrint('=== Inference result ===');
@@ -73,9 +77,8 @@ class LocalInferenceService {
 
       return result;
     } catch (e) {
-      await inputTensor.dispose();
       debugPrint('LocalInferenceService inference: $e');
-      rethrow;
+      return false;
     }
   }
 
@@ -118,5 +121,6 @@ class LocalInferenceService {
     _session = null;
     _ort = null;
     _initialized = false;
+    _isAvailable = false;
   }
 }

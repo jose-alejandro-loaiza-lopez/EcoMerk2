@@ -228,15 +228,17 @@ class _SearchPageState extends State<SearchPage> {
 
         bool? hasProtein;
         String? proteinLabel;
-        try {
-          final imageUrl = item['imagen']?.toString() ?? '';
-          if (imageUrl.isNotEmpty) {
-            hasProtein = await LocalInferenceService.hasProtein(imageUrl);
-            proteinLabel = hasProtein ? '🥩 Con proteína' : '🌱 Sin proteína';
+        if (LocalInferenceService.isAvailable) {
+          try {
+            final imageUrl = item['imagen']?.toString() ?? '';
+            if (imageUrl.isNotEmpty) {
+              hasProtein = await LocalInferenceService.hasProtein(imageUrl);
+              proteinLabel = hasProtein ? 'Con proteína' : 'Sin proteína';
+            }
+          } catch (e) {
+            debugPrint('Protein inference failed for $itemNombre: $e');
+            proteinLabel = 'Inferencia falló';
           }
-        } catch (e) {
-          debugPrint('Protein inference failed for $itemNombre: $e');
-          proteinLabel = '⚠️ Inferencia falló';
         }
 
         final productoFavorito = {

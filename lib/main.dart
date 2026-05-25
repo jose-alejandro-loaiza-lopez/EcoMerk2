@@ -5,6 +5,7 @@ import 'package:ecomerk2/data/services/navigation_mode_service.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
 import 'package:ecomerk2/data/services/security_manager.dart';
 import 'package:ecomerk2/data/services/notification_service.dart';
+import 'package:ecomerk2/data/services/local_inference_service.dart';
 import 'package:ecomerk2/core/workers/price_check_worker.dart';
 import 'package:ecomerk2/core/constants/env_config.dart';
 import 'routes/app_routes.dart';
@@ -20,6 +21,9 @@ Future<void> main() async {
 
   // Inicializar notificaciones locales
   await NotificationService.instance.init();
+
+  // Inicializar detección de proteína por IA (no crítico, falla silenciosamente)
+  await LocalInferenceService.init();
 
   // Registrar tarea periódica de verificación de precios en background
   await Workmanager().initialize(priceCheckCallback, isInDebugMode: false);
