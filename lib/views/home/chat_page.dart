@@ -288,45 +288,55 @@ class _ChatPageState extends State<ChatPage>
       }
 
       if (data['action'] == 'search') {
-        // La IA quiere buscar en tiendas → ejecutar FASE 2
-        final query = data['query'] as String? ?? '';
-        final toolCallId = data['toolCallId'] as String? ?? '';
-        final arguments = data['arguments'] as String? ?? '';
+        // La IA quiere buscar en tiendas → loop para llamadas secuenciales
+        var query = data['query'] as String? ?? '';
+        var toolCallId = data['toolCallId'] as String? ?? '';
+        var arguments = data['arguments'] as String? ?? '';
 
-        if (mounted) setState(() => _buscandoEnTiendas = true);
+        while (true) {
+          if (mounted) setState(() => _buscandoEnTiendas = true);
 
-        final resultados = await MarketApiService.buscarEnTiendas(query);
+          final resultados = await MarketApiService.buscarEnTiendas(query);
 
-        final resultadosMapeados = resultados
-            .map(
-              (r) => {
-                'nombre': r['nombre'],
-                'tienda': r['tienda'],
-                'precio': r['precio'],
-                'link': r['link'],
-              },
-            )
-            .toList();
+          final resultadosMapeados = resultados
+              .map(
+                (r) => {
+                  'nombre': r['nombre'],
+                  'tienda': r['tienda'],
+                  'precio': r['precio'],
+                  'link': r['link'],
+                },
+              )
+              .toList();
 
-        if (mounted) setState(() => _buscandoEnTiendas = false);
+          if (mounted) setState(() => _buscandoEnTiendas = false);
 
-        final data2 = await ChatApiService.reenviarConResultados(
-          mensaje: texto,
-          favoritos: _favoritos,
-          resultadosBusqueda: resultadosMapeados,
-          toolCallId: toolCallId,
-          arguments: arguments,
-        );
+          final response = await ChatApiService.reenviarConResultados(
+            mensaje: texto,
+            favoritos: _favoritos,
+            resultadosBusqueda: resultadosMapeados,
+            toolCallId: toolCallId,
+            arguments: arguments,
+          );
 
-        final textoRespuesta =
-            data2?['respuesta'] as String? ??
-            'Lo siento, no pude procesar tu consulta. Intenta de nuevo.';
+          if (response == null || response['action'] != 'search') {
+            final textoRespuesta =
+                response?['respuesta'] as String? ??
+                'Lo siento, no pude procesar tu consulta. Intenta de nuevo.';
 
-        if (mounted) {
-          setState(() {
-            _mensajes.insert(0, {'rol': 'ia', 'texto': textoRespuesta});
-            _cargando = false;
-          });
+            if (mounted) {
+              setState(() {
+                _mensajes.insert(0, {'rol': 'ia', 'texto': textoRespuesta});
+                _cargando = false;
+              });
+            }
+            return;
+          }
+
+          // La IA pide otra búsqueda: continuar el loop
+          query = response['query'] as String? ?? '';
+          toolCallId = response['toolCallId'] as String? ?? '';
+          arguments = response['arguments'] as String? ?? '';
         }
       } else {
         // Respuesta normal de la IA

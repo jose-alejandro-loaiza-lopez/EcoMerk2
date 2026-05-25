@@ -423,7 +423,7 @@ Base: `/chat`
 ### POST /chat/ia — Enviar mensaje a la IA (con tool calling)
 
 - **Autenticación:** SÍ
-- **Flujo en dos fases:**
+- **Flujo multi-fase (búsquedas en cadena):**
 
   **FASE 1 — El usuario envía un mensaje:**
   ```json
@@ -448,7 +448,7 @@ Base: `/chat`
   }
   ```
 
-  **FASE 2 — Flutter ejecuta la búsqueda y reenvía:**
+  **FASE 2 (y siguientes) — Flutter ejecuta la búsqueda y reenvía:**
   Flutter recibe `action: "search"`, ejecuta `MarketApiService.buscarEnTiendas(query)` y envía:
   ```json
   {
@@ -472,25 +472,38 @@ Base: `/chat`
     "arguments": "{\"query\": \"arroz\"}"
   }
   ```
-  El backend reconstruye la conversación con los resultados y la IA responde con datos reales:
+  El backend reconstruye la conversación con los resultados y la IA vuelve a tener `buscarEnTiendas` disponible, por lo que puede **responder con datos reales** o **solicitar otra búsqueda** si necesita más información:
+
+  **La IA responde (sin más búsquedas):**
   ```json
   {
     "respuesta": "Estos son los resultados para **arroz**:\n\n1. **Arroz Diana 500g** en Éxito: $2.500 COP\n2. **Arroz Caribe 1kg** en Olímpica: $3.200 COP\n\n¿Te gustaría que te recomiende una receta con alguno de estos?"
   }
   ```
 
+  **La IA solicita otra búsqueda:**
+  ```json
+  {
+    "action": "search",
+    "query": "aceite",
+    "toolCallId": "call_def456",
+    "arguments": "{\"query\": \"aceite\"}"
+  }
+  ```
+  En ese caso Flutter repite la FASE 2 con los nuevos resultados y un nuevo `toolCallId`. El ciclo se repite hasta que la IA decida responder.
+
 - **Campos del request:**
   | Campo | Tipo | Obligatorio | Descripción |
   |---|---|---|---|
   | `mensaje` | string | sí | Texto del usuario |
   | `favoritos` | array | No | Contexto de productos favoritos. Cada item: `{ nombre, tienda, precio, hasProtein }` |
-  | `resultadosBusqueda` | array | No (FASE 2) | Resultados de MarketApiService. Cada item: `{ nombre, tienda, precio, link }` |
-  | `toolCallId` | string | No (FASE 2) | ID del tool_call devuelto en FASE 1 |
-  | `arguments` | string | No (FASE 2) | Argumentos JSON del tool_call devuelto en FASE 1 |
+  | `resultadosBusqueda` | array | No (FASE 2+) | Resultados de MarketApiService. Cada item: `{ nombre, tienda, precio, link }` |
+  | `toolCallId` | string | No (FASE 2+) | ID del tool_call devuelto en la fase anterior |
+  | `arguments` | string | No (FASE 2+) | Argumentos JSON del tool_call devuelto en la fase anterior |
 
 - **Flujo interno:**
-   - FASE 1: Guarda el mensaje del usuario en BD, consulta a OpenRouter con tools, devuelve action o respuesta
-   - FASE 2: NO guarda el mensaje otra vez, reconstruye el tool_call, consulta a OpenRouter sin tools, guarda la respuesta final y la devuelve
+   - FASE 1: Guarda el mensaje del usuario en BD, consulta a OpenRouter con tools, devuelve `action` o `respuesta`
+   - FASE 2+: NO guarda el mensaje otra vez, reconstruye el tool_call, consulta a OpenRouter **con tools** (puede volver a buscar o responder), guarda la respuesta final solo cuando la IA responde texto
 - **Error 500 (OpenRouter falla):**
   ```json
   {
