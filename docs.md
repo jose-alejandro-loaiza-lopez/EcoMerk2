@@ -173,7 +173,7 @@ Base: `/usuarios`
         "email": "carlos@example.com",
         "fechaNacimiento": "1990-01-01",
         "favoritos": [
-          { "productId": "prod_abc", "notificaciones": true }
+          { "productId": "prod_abc", "notificaciones": true, "hasProtein": false }
         ],
         "role": "ROLE_USER"
       }
@@ -336,11 +336,13 @@ Reemplaza **toda** la lista de favoritos del usuario con la lista enviada.
   [
     {
       "productId": "prod_abc_123",
-      "notificaciones": true
+      "notificaciones": true,
+      "hasProtein": true
     },
     {
       "productId": "prod_def_456",
-      "notificaciones": false
+      "notificaciones": false,
+      "hasProtein": false
     }
   ]
   ```
@@ -348,6 +350,7 @@ Reemplaza **toda** la lista de favoritos del usuario con la lista enviada.
   |---|---|---|
   | `productId` | string | Identificador del producto |
   | `notificaciones` | boolean | Activar notificaciones para este producto |
+  | `hasProtein` | boolean | Indica si el producto contiene proteína |
 - **Response 200:**
   ```json
   {
@@ -357,8 +360,8 @@ Reemplaza **toda** la lista de favoritos del usuario con la lista enviada.
       "email": "carlos@example.com",
       "fechaNacimiento": "1990-01-01",
       "favoritos": [
-        { "productId": "prod_abc_123", "notificaciones": true },
-        { "productId": "prod_def_456", "notificaciones": false }
+        { "productId": "prod_abc_123", "notificaciones": true, "hasProtein": true },
+        { "productId": "prod_def_456", "notificaciones": false, "hasProtein": false }
       ],
       "role": "ROLE_USER"
     },
@@ -417,43 +420,77 @@ Base: `/chat`
 
 ---
 
-### POST /chat/ia — Enviar mensaje a la IA
+### POST /chat/ia — Enviar mensaje a la IA (con tool calling)
 
 - **Autenticación:** SÍ
-- **Request:**
+- **Flujo en dos fases:**
+
+  **FASE 1 — El usuario envía un mensaje:**
   ```json
   {
-    "mensaje": "¿Qué puedo cocinar con huevos y arroz?",
-    "favoritos": [
-      {
-        "nombre": "Arroz Diana",
-        "tienda": "Éxito",
-        "precio": "2500"
-      },
-      {
-        "nombre": "Huevos Santa Reyes",
-        "tienda": "Carulla",
-        "precio": 12000
-      }
-    ]
+    "mensaje": "busca arroz barato",
+    "favoritos": [...]
   }
   ```
+  La IA tiene la función `buscarEnTiendas` disponible. Si decide usarla, el backend responde:
+  ```json
+  {
+    "action": "search",
+    "query": "arroz",
+    "toolCallId": "call_abc123",
+    "arguments": "{\"query\": \"arroz\"}"
+  }
+  ```
+  Si la IA no necesita buscar, responde normal:
+  ```json
+  {
+    "respuesta": "Claro, aquí tienes una receta..."
+  }
+  ```
+
+  **FASE 2 — Flutter ejecuta la búsqueda y reenvía:**
+  Flutter recibe `action: "search"`, ejecuta `MarketApiService.buscarEnTiendas(query)` y envía:
+  ```json
+  {
+    "mensaje": "busca arroz barato",
+    "favoritos": [...],
+    "resultadosBusqueda": [
+      {
+        "nombre": "Arroz Diana 500g",
+        "tienda": "Éxito",
+        "precio": 2500,
+        "link": "https://www.exito.com/arroz-diana/p"
+      },
+      {
+        "nombre": "Arroz Caribe 1kg",
+        "tienda": "Olímpica",
+        "precio": 3200,
+        "link": "https://www.olimpica.com/arroz-caribe/p"
+      }
+    ],
+    "toolCallId": "call_abc123",
+    "arguments": "{\"query\": \"arroz\"}"
+  }
+  ```
+  El backend reconstruye la conversación con los resultados y la IA responde con datos reales:
+  ```json
+  {
+    "respuesta": "Estos son los resultados para **arroz**:\n\n1. **Arroz Diana 500g** en Éxito: $2.500 COP\n2. **Arroz Caribe 1kg** en Olímpica: $3.200 COP\n\n¿Te gustaría que te recomiende una receta con alguno de estos?"
+  }
+  ```
+
+- **Campos del request:**
   | Campo | Tipo | Obligatorio | Descripción |
   |---|---|---|---|
   | `mensaje` | string | sí | Texto del usuario |
-  | `favoritos` | array | No | Contexto de productos favoritos. Cada item: `{ nombre, tienda, precio }` |
+  | `favoritos` | array | No | Contexto de productos favoritos. Cada item: `{ nombre, tienda, precio, hasProtein }` |
+  | `resultadosBusqueda` | array | No (FASE 2) | Resultados de MarketApiService. Cada item: `{ nombre, tienda, precio, link }` |
+  | `toolCallId` | string | No (FASE 2) | ID del tool_call devuelto en FASE 1 |
+  | `arguments` | string | No (FASE 2) | Argumentos JSON del tool_call devuelto en FASE 1 |
+
 - **Flujo interno:**
-  1. Guarda el mensaje del usuario en BD (`esIa = false`)
-  2. Construye system prompt con favoritos
-  3. Envía a OpenRouter (API key del servidor)
-  4. Guarda la respuesta de la IA en BD (`esIa = true`)
-  5. Devuelve la respuesta al cliente
-- **Response 200:**
-  ```json
-  {
-    "respuesta": "¡Claro! Con huevos y arroz puedes preparar un delicioso **arroz con huevo** o un **arroz chino**.\n\n**Receta rápida:**\n1. Sofríe ajo y cebolla\n2. Agrega el arroz cocido\n3. Haz un huevo revuelto aparte\n4. Mezcla todo y sazona"
-  }
-  ```
+   - FASE 1: Guarda el mensaje del usuario en BD, consulta a OpenRouter con tools, devuelve action o respuesta
+   - FASE 2: NO guarda el mensaje otra vez, reconstruye el tool_call, consulta a OpenRouter sin tools, guarda la respuesta final y la devuelve
 - **Error 500 (OpenRouter falla):**
   ```json
   {
@@ -617,7 +654,8 @@ CREATE TABLE usuarios (
 CREATE TABLE usuario_favoritos (
     usuario_id BIGINT NOT NULL REFERENCES usuarios(id),
     product_id TEXT NOT NULL,
-    notificaciones BOOLEAN NOT NULL DEFAULT FALSE
+    notificaciones BOOLEAN NOT NULL DEFAULT FALSE,
+    has_protein BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- Mensajes del chat con IA

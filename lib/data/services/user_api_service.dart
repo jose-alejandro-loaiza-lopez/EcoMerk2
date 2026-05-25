@@ -262,6 +262,8 @@ class ApiService {
           return {
             'productId': idDetectado,
             'notificaciones': item['notificaciones'] ?? false,
+            if (item['hasProtein'] != null)
+              'hasProtein': item['hasProtein'],
           };
         }
         return {'productId': item.toString(), 'notificaciones': false};
