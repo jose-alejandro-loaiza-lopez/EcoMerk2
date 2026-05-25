@@ -88,11 +88,11 @@ class _ChatPageState extends State<ChatPage>
   ];
 
   final List<String> _sugerenciasRapidas = [
-    '¿Precios en Éxito?',
-    '¿Precios en Olímpica?',
-    '¿Precios en Surtifamiliar?',
+    '¿Precios del arroz?',
+    'Consulta carnes',
+    '¿Precios del aceite?',
     'Receta económica',
-    'Cómo ahorrar',
+    '¿Cómo ahorrar?',
   ];
 
   @override
@@ -278,7 +278,8 @@ class _ChatPageState extends State<ChatPage>
           setState(() {
             _mensajes.insert(0, {
               'rol': 'ia',
-              'texto': 'Lo siento, no pude procesar tu consulta. Intenta de nuevo.',
+              'texto':
+                  'Lo siento, no pude procesar tu consulta. Intenta de nuevo.',
             });
             _cargando = false;
           });
@@ -296,12 +297,16 @@ class _ChatPageState extends State<ChatPage>
 
         final resultados = await MarketApiService.buscarEnTiendas(query);
 
-        final resultadosMapeados = resultados.map((r) => {
-          'nombre': r['nombre'],
-          'tienda': r['tienda'],
-          'precio': r['precio'],
-          'link': r['link'],
-        }).toList();
+        final resultadosMapeados = resultados
+            .map(
+              (r) => {
+                'nombre': r['nombre'],
+                'tienda': r['tienda'],
+                'precio': r['precio'],
+                'link': r['link'],
+              },
+            )
+            .toList();
 
         if (mounted) setState(() => _buscandoEnTiendas = false);
 
@@ -313,7 +318,8 @@ class _ChatPageState extends State<ChatPage>
           arguments: arguments,
         );
 
-        final textoRespuesta = data2?['respuesta'] as String? ??
+        final textoRespuesta =
+            data2?['respuesta'] as String? ??
             'Lo siento, no pude procesar tu consulta. Intenta de nuevo.';
 
         if (mounted) {
@@ -324,7 +330,8 @@ class _ChatPageState extends State<ChatPage>
         }
       } else {
         // Respuesta normal de la IA
-        final textoRespuesta = data['respuesta'] as String? ??
+        final textoRespuesta =
+            data['respuesta'] as String? ??
             'Lo siento, no pude procesar tu consulta. Intenta de nuevo.';
 
         if (mounted) {
@@ -533,7 +540,7 @@ class _ChatPageState extends State<ChatPage>
                 ? const Center(
                     child: CircularProgressIndicator(color: Color(0xFF1D9E75)),
                   )
-                : _mensajes.isEmpty && _mostrarMenuRapido
+                : _mostrarMenuRapido
                 ? _buildMenuInicial()
                 : _mensajes.isEmpty
                 ? _buildEstadoInicial()
@@ -989,7 +996,8 @@ class _ChatPageState extends State<ChatPage>
                         mainAxisSize: MainAxisSize.min,
                         children: List.generate(3, (i) {
                           final delay = i / 3;
-                          final value = ((_dotController.value - delay) % 1.0).abs();
+                          final value = ((_dotController.value - delay) % 1.0)
+                              .abs();
                           return Container(
                             width: 7,
                             height: 7,

@@ -197,10 +197,21 @@ class MarketApiService {
         for (var item in items) {
           double precio = (item['currentPrice'] as num?)?.toDouble() ?? 0.0;
 
+          String categoriaSlug = item['categoria_slug'] ?? '';
+          String productoSlug = item['producto_slug'] ?? '';
+
           String slugCrudo = item['slug'] ?? '';
           String productId = slugCrudo.contains('/')
               ? slugCrudo.split('/').last
               : slugCrudo;
+
+          String linkCompleto = "https://www.surtifamiliar.com/";
+          if (categoriaSlug.isNotEmpty && productoSlug.isNotEmpty) {
+            linkCompleto = "$linkCompleto$categoriaSlug/$productoSlug";
+          } else if (slugCrudo.isNotEmpty) {
+            // Aseguramos el '/' intermedio para que el enlace de respaldo no se rompa
+            linkCompleto = "$linkCompleto$slugCrudo";
+          }
 
           if (precio > 0) {
             resultados.add({
@@ -209,7 +220,7 @@ class MarketApiService {
               'precio': precio,
               'tienda': 'Surtifamiliar',
               'imagen': baseImgUrl + (item['principalImage'] ?? ''),
-              'link': slugCrudo,
+              'link': linkCompleto,
             });
           }
         }
