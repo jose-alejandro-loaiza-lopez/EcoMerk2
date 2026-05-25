@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../../core/constants/env_config.dart';
+
 class MarketApiService {
   static Future<List<dynamic>> buscarEnTiendas(
     String query, {
@@ -37,15 +39,14 @@ class MarketApiService {
     try {
       final String queryEncoded = Uri.encodeComponent(query);
       final url = Uri.parse(
-        'https://www.exito.com/api/catalog_system/pub/products/search?ft=$queryEncoded&O=$orden&_from=0&_to=9',
+        '${EnvConfig.exitoApiUrl}?ft=$queryEncoded&O=$orden&_from=0&_to=9',
       );
 
       final response = await http.get(
         url,
         headers: {
           'Accept': 'application/json',
-          'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'User-Agent': EnvConfig.userAgentExito,
         },
       );
 
@@ -71,7 +72,7 @@ class MarketApiService {
                   'precio': (offer['Price'] as num).toDouble(),
                   'tienda': 'Éxito',
                   'imagen': item['images'][0]['imageUrl'] ?? '',
-                  'link': 'https://www.exito.com/${product['linkText']}/p',
+                  'link': '${EnvConfig.exitoWebUrl}/${product['linkText']}/p',
                 };
               } catch (e) {
                 return null;
@@ -94,7 +95,7 @@ class MarketApiService {
       final String queryEncoded = Uri.encodeComponent(query);
 
       final url = Uri.parse(
-        'https://www.olimpica.com/api/catalog_system/pub/products/search/$queryEncoded?O=$orden&_from=0&_to=9',
+        '${EnvConfig.olimpicaApiUrl}/$queryEncoded?O=$orden&_from=0&_to=9',
       );
 
       final response = await http.get(
@@ -102,8 +103,7 @@ class MarketApiService {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
-          'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'User-Agent': EnvConfig.userAgentOlimpica,
         },
       );
 
@@ -146,9 +146,7 @@ class MarketApiService {
     String orden = 'OrderByScoreDESC',
   }) async {
     try {
-      final url = Uri.parse(
-        'https://ecommerce.surtifamiliar.com/backend/admin/frontend/web/index.php/categoria-info/show-items-by-cattegory',
-      );
+      final url = Uri.parse(EnvConfig.surtifamiliarApiSearchUrl);
 
       String surtiSort = "1";
       if (orden == 'OrderByPriceASC') {
@@ -162,10 +160,9 @@ class MarketApiService {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json, text/plain, */*',
-          'Origin': 'https://www.surtifamiliar.com',
-          'Referer': 'https://www.surtifamiliar.com/',
-          'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
+          'Origin': EnvConfig.surtifamiliarWebUrl,
+          'Referer': '${EnvConfig.surtifamiliarWebUrl}/',
+          'User-Agent': EnvConfig.userAgentSurtifamiliar,
         },
         body: jsonEncode({
           "id": null,
@@ -191,8 +188,7 @@ class MarketApiService {
         final data = jsonDecode(response.body);
         final List<dynamic> items = data['items'] ?? [];
         List<dynamic> resultados = [];
-        const String baseImgUrl =
-            "https://ecommerce.surtifamiliar.com/backend/admin/backend/web/archivosDelCliente/items/images/";
+        final String baseImgUrl = EnvConfig.surtifamiliarImagesUrl;
 
         for (var item in items) {
           double precio = (item['currentPrice'] as num?)?.toDouble() ?? 0.0;
@@ -205,7 +201,7 @@ class MarketApiService {
               ? slugCrudo.split('/').last
               : slugCrudo;
 
-          String linkCompleto = "https://www.surtifamiliar.com/";
+          String linkCompleto = "${EnvConfig.surtifamiliarWebUrl}/";
           if (categoriaSlug.isNotEmpty && productoSlug.isNotEmpty) {
             linkCompleto = "$linkCompleto$categoriaSlug/$productoSlug";
           } else if (slugCrudo.isNotEmpty) {

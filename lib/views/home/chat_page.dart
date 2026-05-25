@@ -38,9 +38,6 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage>
     with SingleTickerProviderStateMixin {
-  static int _ultimoIdInstancia = 0;
-  int _idInstancia = 0;
-
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
@@ -105,7 +102,6 @@ class _ChatPageState extends State<ChatPage>
   @override
   void initState() {
     super.initState();
-    _idInstancia = ++_ultimoIdInstancia;
     ChatPage.respuestaPendiente.value = false;
     _dotController = AnimationController(
       vsync: this,
