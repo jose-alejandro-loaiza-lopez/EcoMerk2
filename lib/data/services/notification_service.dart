@@ -46,26 +46,31 @@ class NotificationService {
   /// [tienda] tienda donde se encontró el nuevo precio.
   /// [precioAntes] precio de referencia guardado.
   /// [precioAhora] precio actual encontrado.
+  /// [subio] `true` si el precio subió, `false` si bajó.
   Future<void> mostrarAlertaDePrecio({
     required String nombre,
     required String tienda,
     required double precioAntes,
     required double precioAhora,
+    required bool subio,
   }) async {
     if (!_initialized) await init();
 
-    final diferencia = ((precioAntes - precioAhora) / precioAntes * 100)
+    final diferencia = ((precioAhora - precioAntes) / precioAntes * 100)
         .abs()
         .toStringAsFixed(0);
 
-    final titulo = '📉 Precio bajó $diferencia% — $nombre';
+    final verbo = subio ? 'subió' : 'bajó';
+    final emoji = subio ? '📈' : '📉';
+
+    final titulo = '$emoji $nombre $verbo $diferencia%';
     final cuerpo =
         'Ahora: \$${_fmt(precioAhora)} en $tienda (antes \$${_fmt(precioAntes)})';
 
     const androidDetails = AndroidNotificationDetails(
       'price_alerts',
       'Alertas de precio',
-      channelDescription: 'Notificaciones cuando baja el precio de un favorito',
+      channelDescription: 'Notificaciones cuando cambia el precio de un favorito',
       importance: Importance.high,
       priority: Priority.high,
       icon: '@mipmap/ic_launcher',
