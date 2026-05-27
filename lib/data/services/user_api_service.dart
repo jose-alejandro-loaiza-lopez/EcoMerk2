@@ -82,16 +82,55 @@ class ApiService {
   /// Obtiene un access token válido, renovando si es necesario.
   ///
   /// Flujo:
-  /// 1. Si el token está vigente (< 23h) → lo devuelve
+  /// 1. Si el token está vigente (< 12 min) → lo devuelve
   /// 2. Si no → intenta renovar con refreshToken
-  /// 3. Si falla → retorna null (el caller debe manejar re-login)
+  /// 3. Si falla → intenta re-login con credenciales guardadas
+  /// 4. Si todo falla → retorna null
   static Future<String?> obtenerTokenValido() async {
     final vigente = await tokenEstaVigente();
-    if (!vigente) {
-      final renovado = await renovarToken();
-      if (!renovado) return null;
+    if (vigente) return await obtenerToken();
+
+    final renovado = await renovarToken();
+    if (renovado) return await obtenerToken();
+
+    final credenciales = await obtenerCredenciales();
+    if (credenciales != null) {
+      final loginResult = await login(
+        email: credenciales['email']!,
+        password: credenciales['password']!,
+      );
+      if (loginResult['exito'] == true) {
+        return await obtenerToken();
+      }
     }
-    return await obtenerToken();
+
+    return null;
+  }
+
+  /// Ejecuta una petición autenticada con retry automático si recibe 401.
+  ///
+  /// 1. Obtiene token válido (con refresh + re-login automático)
+  /// 2. Ejecuta la petición
+  /// 3. Si la respuesta es 401, renueva el token y reintenta una vez
+  static Future<http.Response?> ejecutarConAuth(
+    Future<http.Response> Function(String token) peticion,
+  ) async {
+    var token = await obtenerTokenValido();
+    if (token == null) return null;
+
+    var response = await peticion(token);
+
+    if (response.statusCode == 401) {
+      final renovado = await renovarToken();
+      if (renovado) {
+        token = await obtenerToken();
+        if (token != null) {
+          response = await peticion(token);
+        }
+      }
+    }
+
+    return response;
   }
 
   // ─── BORRAR SESIÓN ───────────────────────────────────────────
@@ -183,22 +222,16 @@ class ApiService {
   // ─── OBTENER USUARIO ─────────────────────────────────────────
   static Future<Map<String, dynamic>?> obtenerUsuario(int id) async {
     try {
-      final token = await obtenerTokenValido();
-      if (token == null) return {'_tokenExpirado': true};
-
-      final response = await _client.get(
+      final response = await ejecutarConAuth((token) => _client.get(
         Uri.parse('$baseUrl/usuarios/$id'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
-      );
+      ));
+      if (response == null) return {'_tokenExpirado': true};
       if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        return body['usuario'];
-      }
-      if (response.statusCode == 401 || response.statusCode == 403) {
-        return {'_tokenExpirado': true};
+        return jsonDecode(response.body)['usuario'];
       }
       return null;
     } catch (e) {
@@ -213,9 +246,6 @@ class ApiService {
   /// Body: array de { productId: string, notificaciones: bool }
   static Future<bool> actualizarLista(int id, List<dynamic> lista) async {
     try {
-      final token = await obtenerTokenValido();
-      if (token == null) return false;
-
       // Convertir la lista interna al formato que espera el backend
       // productId ya viene en formato "tienda::id" desde search_page
       final listaFormateada = lista.map((item) {
@@ -232,20 +262,22 @@ class ApiService {
           return {
             'productId': idDetectado,
             'notificaciones': item['notificaciones'] ?? false,
+            if (item['hasProtein'] != null)
+              'hasProtein': item['hasProtein'],
           };
         }
         return {'productId': item.toString(), 'notificaciones': false};
       }).toList();
 
-      final response = await _client.patch(
+      final response = await ejecutarConAuth((token) => _client.patch(
         Uri.parse('$baseUrl/usuarios/$id/favoritos'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
         body: jsonEncode(listaFormateada),
-      );
-      return response.statusCode == 200;
+      ));
+      return response?.statusCode == 200;
     } catch (e) {
       return false;
     }
@@ -264,12 +296,7 @@ class ApiService {
     required String fechaNacimiento,
   }) async {
     try {
-      final token = await obtenerTokenValido();
-      if (token == null) {
-        return {'exito': false, 'mensaje': 'Sesión expirada'};
-      }
-
-      final response = await _client.put(
+      final response = await ejecutarConAuth((token) => _client.put(
         Uri.parse('$baseUrl/usuarios/$id'),
         headers: {
           'Authorization': 'Bearer $token',
@@ -281,7 +308,11 @@ class ApiService {
           'password': password,
           'fechaNacimiento': fechaNacimiento,
         }),
-      );
+      ));
+
+      if (response == null) {
+        return {'exito': false, 'mensaje': 'Sesión expirada'};
+      }
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
@@ -308,18 +339,17 @@ class ApiService {
   /// Según docs.md: DELETE /usuarios/{id}
   static Future<Map<String, dynamic>> eliminarCuenta(int id) async {
     try {
-      final token = await obtenerTokenValido();
-      if (token == null) {
-        return {'exito': false, 'mensaje': 'Sesión expirada'};
-      }
-
-      final response = await _client.delete(
+      final response = await ejecutarConAuth((token) => _client.delete(
         Uri.parse('$baseUrl/usuarios/$id'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
-      );
+      ));
+
+      if (response == null) {
+        return {'exito': false, 'mensaje': 'Sesión expirada'};
+      }
 
       if (response.statusCode == 200) {
         await borrarToken();

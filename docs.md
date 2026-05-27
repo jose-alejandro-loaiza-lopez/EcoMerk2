@@ -1,247 +1,757 @@
+# API EcoMerk2 — Documentación para Frontend (Flutter)
 
-**Base URL**: `https://usuarios-bd-production.up.railway.app/api/v1`
+**Base URL (producción):** `https://usuarios-bd-production.up.railway.app/api/v1`
+**Base URL (local):** `http://localhost:8080/api/v1`
 
-**Formato de autorización**: incluir header `Authorization: Bearer <ACCESS_TOKEN>` para endpoints que requieran autenticación.  
-- `ACCESS_TOKEN` = JWT (expiración por defecto: 1 día).  
-- `REFRESH_TOKEN` = token largo retornado por el servidor (expiración por defecto: 7 días).
+---
 
-**Paginación / tamaño**: bloques de mensajes y páginas usan tamaño fijo 10 (constante `CANTIDAD_POR_PAGINA = 10`).
+> ⚠️ **IMPORTANTE: Cifrado obligatorio.** Toda petición con body y toda respuesta (excepto `GET /usuarios/public-key`) viaja cifrada con RSA + AES. Los JSON de ejemplo en esta documentación muestran el **contenido descifrado**. Si envías JSON plano, el backend responde con **400 Bad Request**. Ver sección [Cifrado](#5-cifrado-extremo-a-extremo-obligatorio).
 
-**1) Auth**
-- **POST /auth/refresh**
-  - Autenticación: NO (endpoint público; valida el `refreshToken` en body).
-  - Request JSON:
-    - `refreshToken` (string) — el refresh token que el cliente recibió al login/rotación.
-  - Response 200:
-    - `token` (string) — nuevo `access token` (JWT).
-    - `refreshToken` (string) — nuevo `refresh token` rotado.
-    - `mensaje` (string)
-  - Errores típicos: `400` (validación), `401` (si se implementa), `500` (token inválido/expirado - revisar backend).
-  - Ejemplo curl:
-    ```bash
-    curl -X POST http://localhost:8080/api/v1/auth/refresh \
-      -H "Content-Type: application/json" \
-      -d '{"refreshToken":"<REFRESH_TOKEN>"}'
-    ```
+---
 
-**2) Usuarios (gestión de usuarios)**
-Base: `/usuarios`
+## Autenticación
 
-- **POST /usuarios/** — Registrar usuario
-  - Autenticación: NO
-  - Request JSON (`UsuarioRequest`):
-    - `nombre` (string) — obligatorio
-    - `email` (string) — obligatorio, formato email
-    - `password` (string) — obligatorio, mínimo 8 caracteres
-    - `fechaNacimiento` (yyyy-MM-dd) — obligatorio
-  - Response 201:
-    - `mensaje`: "¡El usuario ha sido creado con éxito!"
-    - `usuario`: objeto `Usuarios` (contiene `id`, `nombre`, `email`, `fechaNacimiento`, `favoritos`, `role` — `password` no se expone)
-  - Ejemplo:
-    ```bash
-    curl -X POST http://localhost:8080/api/v1/usuarios/ \
-      -H "Content-Type: application/json" \
-      -d '{"nombre":"Carlos","email":"carlos@example.com","password":"pass12345","fechaNacimiento":"1990-01-01"}'
-    ```
+| Concepto | Valor |
+|---|---|
+| **Access token** | JWT, expira en **15 minutos** |
+| **Refresh token** | UUID rotado, expira en **1 día** |
+| **Formato** | Header `Authorization: Bearer <ACCESS_TOKEN>` |
+| **Almacenamiento** | Access token en memoria; refresh token en almacenamiento seguro |
 
-- **POST /usuarios/login** — Login (obtener `access` + `refresh`)
-  - Autenticación: NO
-  - Request JSON (`LoginRequest`):
-    - `email`, `password`
-  - Response 200:
-    - `token` (string) — access JWT
-    - `refreshToken` (string) — refresh token (texto plano) que debe guardarse en el cliente
-    - `id` (number) — id del usuario
-    - `mensaje` (string)
-  - Nota: El login devuelve tanto `token` como `refreshToken`. El cliente debe almacenar
-    el `refreshToken` de forma segura y, cuando el `access token` expire, llamar a
-    `POST /auth/refresh` con el `refreshToken` para recibir un nuevo `token` y un nuevo
-    `refreshToken` (rotación). El backend almacena sólo un hash del `refreshToken` y
-    revoca tokens anteriores para prevenir reutilización.
-  - Ejemplo:
-    ```bash
-    curl -X POST http://localhost:8080/api/v1/usuarios/login \
-      -H "Content-Type: application/json" \
-      -d '{"email":"juan@example.com","password":"securePass123"}'
-    ```
+> El refresh token se obtiene al hacer login y se rota (se obtiene uno nuevo) cada vez que se usa `POST /auth/refresh`.
 
-- **GET /usuarios/public-key**
-  - Autenticación: NO
-  - Response 200:
-    - `n` (hex string) — módulo RSA en hexadecimal
-    - `e` (hex string) — exponente público en hexadecimal
-  - Uso: cliente (ej. móvil) puede cifrar contraseñas u otros datos.
+---
 
-- **GET /usuarios/** — Listar todos los usuarios
-  - Autenticación: SÍ (ROLE_ADMIN requerido)
-  - Response 200:
-    - `usuarios`: array de objetos `Usuarios`
-  - Nota: protegido por `ROLE_ADMIN` en el backend.
+## 1. Auth
 
-- **GET /usuarios/page/{page}** — Listar usuarios paginados (10 por página)
-  - Autenticación: SÍ (ROLE_ADMIN requerido)
-  - Response 200: objeto `Page` de Spring (contiene `content`, `totalPages`, `totalElements`, `number`, `size`, etc.)
-  - Ejemplo:
-    ```bash
-    curl -H "Authorization: Bearer <ACCESS_TOKEN>" \
-      http://localhost:8080/api/v1/usuarios/page/0
-    ```
+### POST /auth/refresh — Renovar tokens
 
-- **GET /usuarios/{id}** — Obtener usuario por id
-  - Autenticación: SÍ
-  - Response 200:
-    - `mensaje`: "Usuario encontrado."
-    - `usuario`: objeto `Usuarios`
-  - Errores: 404 si no existe.
+Renueva el access token cuando expira. También rota el refresh token (el anterior se invalida).
 
-- **PUT /usuarios/{id}** — Actualizar perfil (owner o admin)
-  - Autenticación: SÍ (solo el dueño del token o `ROLE_ADMIN` puede actualizar)
-  - Request JSON: igual que `UsuarioRequest`
-  - Response 200:
-    - `mensaje`: "Perfil actualizado con éxito."
-    - `usuario`: usuario actualizado
-
-- **DELETE /usuarios/{id}** — Eliminar usuario (owner o admin)
-  - Autenticación: SÍ (solo dueño o admin)
-  - Response 200:
-    - `mensaje`: "El usuario ha sido eliminado con éxito."
-
-- **PATCH /usuarios/{id}/favoritos** — Sincronizar favoritos (owner o admin)
-  - Autenticación: SÍ (solo dueño o admin)
-  - Request JSON: array de `ProductoFavorito` (estructura en backend):
-    - `productId` (string) — identificador del producto; ahora se usan ids en vez de enlaces
-    - `notificaciones` (boolean) — si el usuario activó las notificaciones para ese producto
-  - Response 200:
-    - `usuario`: usuario con `favoritos` sincronizados
-    - `mensaje`: confirmación
-
-**3) Chat privado por usuario (IA)**
-Base: `/chat`
-
-- Resumen conceptual: cada usuario tiene un chat privado con la IA. Los mensajes se guardan por `usuario_id`. No hay timestamps; el orden y paginación se usa por `id` (autoincremental). Los mensajes guardan `contenido` y `es_ia` (boolean).
-
-- **GET /chat/mensajes**
-  - Autenticación: SÍ (cualquier usuario autenticado)
-  - Query params:
-    - `antes` (long, opcional) — cursor: devuelve mensajes con `id < antes` (mensajes anteriores al cursor)
-  - Comportamiento:
-    - Devuelve solo los mensajes del usuario autenticado (se obtiene `usuarioId` desde el JWT → lookup por email).
-    - Orden: por `id` descendente (el primer elemento es el más reciente).
-    - Cantidad máxima devuelta: 10 por petición.
-  - Response 200:
-    - `mensajes`: array de objetos
-      - `id` (long)
-      - `usuarioId` (long)
-      - `contenido` (string)
-      - `esIa` (boolean) — `true` si mensaje es de la IA, `false` si usuario
-    - `cantidad` (int)
-    - `hayMas` (boolean) — `true` si la página devolvió exactamente 10 elementos
-  - Ejemplo:
-    ```bash
-    curl -H "Authorization: Bearer <ACCESS_TOKEN>" \
-      'http://localhost:8080/api/v1/chat/mensajes'
-    ```
-    Con cursor:
-    ```bash
-    curl -G 'http://localhost:8080/api/v1/chat/mensajes' \
-      --data-urlencode 'antes=123' \
-      -H "Authorization: Bearer <ACCESS_TOKEN>"
-    ```
-
-- **POST /chat/mensajes**
-  - Autenticación: SÍ
-  - Request JSON (`MensajeChatRequest`):
-    - `contenido` (string) — obligatorio
-    - `esIa` (boolean) — indica si el mensaje viene de la IA
-  - Comportamiento importante:
-    - `usuarioId` se infiere del token — **NO** enviar `usuarioId` desde el cliente.
-  - Response 201:
-    - `mensaje`: "Mensaje guardado con éxito"
-    - `datos`: objeto del `MensajeChat` guardado (`id`, `usuarioId`, `contenido`, `esIa`)
-  - Ejemplo:
-    ```bash
-    curl -X POST http://localhost:8080/api/v1/chat/mensajes \
-      -H "Authorization: Bearer <ACCESS_TOKEN>" \
-      -H "Content-Type: application/json" \
-      -d '{"contenido":"Hola IA, ¿qué debo hacer?","esIa":false}'
-    ```
-
-**4) Productos (historial de precios)**  
-Base: `/productos`
-
-- **GET /productos/{productId}/precios** — Obtener historial de precios de un producto
-  - Autenticación: NO
-  - Path params:
-    - `productId` (string) — identificador del producto
-  - Response 200:
-    - `productId` (string)
-    - `historial` (array) — lista de objetos `PrecioHistorico` ordenada por `fechaGuardado` descendente:
-      - `id` (number)
-      - `productId` (string)
-      - `precio` (number)
-      - `fechaGuardado` (string, ISO 8601)
-  - Nota: si no hay precios, devuelve `historial: []`.
-  - Ejemplo:
-    ```bash
-    curl http://localhost:8080/api/v1/productos/12345/precios
-    ```
-
-- **POST /productos/{productId}/precios** — Agregar nuevo precio al historial
-  - Autenticación: NO
-  - Request JSON (`PrecioRequest`):
-    - `precio` (number) — obligatorio
-  - Response 201:
-    - `mensaje`: "Precio agregado correctamente"
-    - `precio`: objeto `PrecioHistorico` guardado (`id`, `productId`, `precio`, `fechaGuardado`)
-  - Ejemplo:
-    ```bash
-    curl -X POST http://localhost:8080/api/v1/productos/12345/precios \
-      -H "Content-Type: application/json" \
-      -d '{"precio": 123400.0}'
-    ```
-
-**5) Formatos de respuesta de error (comunes)**
-- `400 Bad Request` — validación de campos:
+- **Autenticación:** NO (público)
+- **Request:**
   ```json
   {
-    "mensaje":"Error de validación en los datos del usuario.",
-    "error":[
+    "refreshToken": "550e8400-e29b-41d4-a716-446655440000-..."
+  }
+  ```
+- **Response 200:**
+  ```json
+  {
+    "token": "eyJhbGciOiJIUzI1NiJ9...",
+    "refreshToken": "a1b2c3d4-e5f6-7890-abcd-ef1234567890-...",
+    "mensaje": "Token renovado con éxito"
+  }
+  ```
+- **Errores:** `400` si `refreshToken` viene vacío, `500` si el token no existe, expiró o fue revocado.
+
+---
+
+## 2. Usuarios
+
+Base: `/usuarios`
+
+### POST /usuarios/ — Registrar usuario
+
+- **Autenticación:** NO (público)
+- **Request** (`UsuarioRequest`):
+  ```json
+  {
+    "nombre": "Carlos Pérez",
+    "email": "carlos@example.com",
+    "password": "Pass12345",
+    "fechaNacimiento": "1990-01-01"
+  }
+  ```
+  | Campo | Tipo | Obligatorio | Validación |
+  |---|---|---|---|
+  | `nombre` | string | sí | `@NotBlank` |
+  | `email` | string | sí | `@Email`, `@NotBlank` |
+  | `password` | string | sí | mínimo 8 caracteres |
+  | `fechaNacimiento` | string (date) | sí | formato `yyyy-MM-dd` |
+- **Response 201:**
+  ```json
+  {
+    "mensaje": "¡El usuario ha sido creado con éxito!",
+    "usuario": {
+      "id": 1,
+      "nombre": "Carlos Pérez",
+      "email": "carlos@example.com",
+      "fechaNacimiento": "1990-01-01",
+      "favoritos": [],
+      "role": "ROLE_USER"
+    }
+  }
+  ```
+  > `password` **nunca** aparece en respuestas. `role` no se puede enviar (solo lectura).
+- **Error 400 (validación):**
+  ```json
+  {
+    "mensaje": "Error de validación en los datos del usuario.",
+    "error": [
       "El campo 'email' Email inválido",
       "El campo 'password' La contraseña es obligatoria"
     ]
   }
   ```
-- `401 Unauthorized` — token faltante o inválido (respuesta de Spring Security).
-- `403 Forbidden` — acceso denegado (por ejemplo: intentar borrar/editar sin permisos):
+- **Error 400 (email duplicado):**
   ```json
   {
-    "error":"Acceso denegado: No tienes rango suficiente para borrar a otro usuario.",
-    "status":403
+    "error": "El correo electrónico 'carlos@example.com' ya está registrado en EcoMerk2.",
+    "status": 400
   }
   ```
-- `404 Not Found` — recurso no encontrado:
-  ```json
-  {
-    "error":"El usuario con ID 123 no fue encontrado.",
-    "status":404
-  }
-  ```
-- `500 Internal Server Error` — errores generales (incluye mensajes de excepción).
 
-**6) Esquema de la tabla de mensajes (DDL sugerido)**
-- Recomendado si la BD parte desde cero (Postgres):
-  ```sql
-  CREATE TABLE mensajes_chat (
+---
+
+### POST /usuarios/login — Iniciar sesión
+
+- **Autenticación:** NO (público)
+- **Request:**
+  ```json
+  {
+    "email": "carlos@example.com",
+    "password": "Pass12345"
+  }
+  ```
+- **Response 200:**
+  ```json
+  {
+    "token": "eyJhbGciOiJIUzI1NiJ9...",
+    "refreshToken": "550e8400-e29b-41d4-a716-446655440000-...",
+    "id": 1,
+    "mensaje": "Bienvenido a EcoMerk2"
+  }
+  ```
+  > Guarda el `refreshToken` en almacenamiento seguro. Cuando el `token` (access JWT) expire, usa `POST /auth/refresh`.
+- **Error 500 (credenciales inválidas):**
+  ```json
+  {
+    "error": "Error interno en Usuarios-Service: El correo electrónico no se encuentra registrado",
+    "status": 500
+  }
+  ```
+  o
+  ```json
+  {
+    "error": "Error interno en Usuarios-Service: Contraseña incorrecta",
+    "status": 500
+  }
+  ```
+
+---
+
+### GET /usuarios/public-key — Obtener clave RSA pública
+
+**Primer paso obligatorio** antes de cualquier otra llamada. Esta es la **única** respuesta en texto plano.
+
+- **Autenticación:** NO (público)
+- **Response 200:**
+  ```json
+  {
+    "n": "b3b9c1c5a3d3f7e8... (hex)",
+    "e": "10001"
+  }
+  ```
+  | Campo | Tipo | Descripción |
+  |---|---|---|
+  | `n` | string (hex) | Módulo RSA de 2048 bits |
+  | `e` | string (hex) | Exponente público (65537) |
+
+---
+
+### GET /usuarios/ — Listar todos los usuarios
+
+- **Autenticación:** SÍ — requiere `ROLE_ADMIN`
+- **Response 200:**
+  ```json
+  {
+    "usuarios": [
+      {
+        "id": 1,
+        "nombre": "Carlos Pérez",
+        "email": "carlos@example.com",
+        "fechaNacimiento": "1990-01-01",
+        "favoritos": [
+          { "productId": "prod_abc", "notificaciones": true, "hasProtein": false }
+        ],
+        "role": "ROLE_USER"
+      }
+    ]
+  }
+  ```
+- **Response 200 (sin usuarios):**
+  ```json
+  {
+    "mensaje": "No hay usuarios registrados en el sistema.",
+    "usuarios": null
+  }
+  ```
+
+---
+
+### GET /usuarios/page/{page} — Listar usuarios paginados
+
+- **Autenticación:** SÍ — requiere `ROLE_ADMIN`
+- **Path param:** `page` (integer, 0-based)
+- **Tamaño de página:** 10 (fijo)
+- **Response 200:** Objeto `Page` de Spring:
+  ```json
+  {
+    "content": [
+      {
+        "id": 1,
+        "nombre": "Carlos Pérez",
+        "email": "carlos@example.com",
+        "fechaNacimiento": "1990-01-01",
+        "favoritos": [],
+        "role": "ROLE_USER"
+      }
+    ],
+    "pageable": {
+      "sort": { "sorted": false, "unsorted": true, "empty": true },
+      "pageNumber": 0,
+      "pageSize": 10,
+      "offset": 0,
+      "paged": true,
+      "unpaged": false
+    },
+    "totalPages": 3,
+    "totalElements": 25,
+    "last": false,
+    "size": 10,
+    "number": 0,
+    "sort": { "sorted": false, "unsorted": true, "empty": true },
+    "first": true,
+    "numberOfElements": 10,
+    "empty": false
+  }
+  ```
+  | Campo clave | Tipo | Descripción |
+  |---|---|---|
+  | `content` | array | Usuarios en esta página |
+  | `totalPages` | int | Total de páginas |
+  | `totalElements` | int | Total de usuarios |
+  | `number` | int | Página actual (0-based) |
+  | `size` | int | 10 (fijo) |
+  | `empty` | bool | `true` si no hay datos |
+- **Error 404 (página vacía):**
+  ```json
+  {
+    "mensaje": "No hay usuarios en la página solicitada: 99"
+  }
+  ```
+
+---
+
+### GET /usuarios/{id} — Obtener usuario por ID
+
+- **Autenticación:** SÍ (cualquier usuario autenticado)
+- **Response 200:**
+  ```json
+  {
+    "mensaje": "Usuario encontrado.",
+    "usuario": {
+      "id": 1,
+      "nombre": "Carlos Pérez",
+      "email": "carlos@example.com",
+      "fechaNacimiento": "1990-01-01",
+      "favoritos": [],
+      "role": "ROLE_USER"
+    }
+  }
+  ```
+- **Error 404:**
+  ```json
+  {
+    "error": "El usuario con ID 999 no fue encontrado.",
+    "status": 404
+  }
+  ```
+
+---
+
+### PUT /usuarios/{id} — Actualizar perfil
+
+- **Autenticación:** SÍ — solo el dueño del token o un admin pueden actualizar
+- **Request:** mismo esquema que `UsuarioRequest`
+  ```json
+  {
+    "nombre": "Carlos Actualizado",
+    "email": "carlos.nuevo@example.com",
+    "password": "NuevaPass123",
+    "fechaNacimiento": "1990-06-15"
+  }
+  ```
+- **Response 200:**
+  ```json
+  {
+    "mensaje": "Perfil actualizado con éxito.",
+    "usuario": {
+      "id": 1,
+      "nombre": "Carlos Actualizado",
+      "email": "carlos.nuevo@example.com",
+      "fechaNacimiento": "1990-06-15",
+      "favoritos": [],
+      "role": "ROLE_USER"
+    }
+  }
+  ```
+- **Error 403 (no autorizado):**
+  ```json
+  {
+    "error": "Acceso denegado: No tienes rango suficiente para modificar a otro usuario.",
+    "status": 403
+  }
+  ```
+
+---
+
+### DELETE /usuarios/{id} — Eliminar usuario
+
+- **Autenticación:** SÍ — solo el dueño del token o un admin pueden eliminar
+- **Response 200:**
+  ```json
+  {
+    "mensaje": "El usuario ha sido eliminado con éxito."
+  }
+  ```
+- **Error 403:**
+  ```json
+  {
+    "error": "Acceso denegado: No tienes rango suficiente para borrar a otro usuario.",
+    "status": 403
+  }
+  ```
+
+---
+
+### PATCH /usuarios/{id}/favoritos — Sincronizar favoritos
+
+Reemplaza **toda** la lista de favoritos del usuario con la lista enviada.
+
+- **Autenticación:** SÍ — solo el dueño del token o un admin
+- **Request:** arreglo de `ProductoFavorito`
+  ```json
+  [
+    {
+      "productId": "prod_abc_123",
+      "notificaciones": true,
+      "hasProtein": true
+    },
+    {
+      "productId": "prod_def_456",
+      "notificaciones": false,
+      "hasProtein": false
+    }
+  ]
+  ```
+  | Campo | Tipo | Descripción |
+  |---|---|---|
+  | `productId` | string | Identificador del producto |
+  | `notificaciones` | boolean | Activar notificaciones para este producto |
+  | `hasProtein` | boolean | Indica si el producto contiene proteína |
+- **Response 200:**
+  ```json
+  {
+    "usuario": {
+      "id": 1,
+      "nombre": "Carlos Pérez",
+      "email": "carlos@example.com",
+      "fechaNacimiento": "1990-01-01",
+      "favoritos": [
+        { "productId": "prod_abc_123", "notificaciones": true, "hasProtein": true },
+        { "productId": "prod_def_456", "notificaciones": false, "hasProtein": false }
+      ],
+      "role": "ROLE_USER"
+    },
+    "mensaje": "Lista de alimentos favoritos sincronizada con éxito."
+  }
+  ```
+
+---
+
+## 3. Chat con IA (EcoIA)
+
+Base: `/chat`
+
+> Cada usuario tiene un chat privado con EcoIA. Los mensajes se guardan por `usuario_id`. El orden es por `id` ascendente (autoincremental). El cliente **nunca** maneja la API key de OpenRouter.
+
+### GET /chat/mensajes — Obtener historial (paginado por cursor)
+
+- **Autenticación:** SÍ (cualquier usuario autenticado)
+- **Query params:**
+
+  | Parámetro | Tipo | Obligatorio | Descripción |
+  |---|---|---|---|
+  | `antes` | long (int64) | No | Cursor: devuelve mensajes con `id < antes` |
+- **Comportamiento:**
+  - Devuelve solo los mensajes del usuario autenticado
+  - Orden descendente por `id` (el más reciente primero)
+  - Máximo **10** mensajes por petición
+  - Si `antes` es `null`, devuelve los últimos 10 mensajes
+- **Response 200:**
+  ```json
+  {
+    "mensajes": [
+      {
+        "id": 21,
+        "usuarioId": 1,
+        "contenido": "¡Hola! ¿En qué puedo ayudarte?",
+        "esIa": true
+      },
+      {
+        "id": 20,
+        "usuarioId": 1,
+        "contenido": "Hola",
+        "esIa": false
+      }
+    ],
+    "cantidad": 2,
+    "hayMas": false
+  }
+  ```
+  | Campo | Tipo | Descripción |
+  |---|---|---|
+  | `mensajes` | array | Lista de mensajes (máx. 10) |
+  | `cantidad` | int | Número de mensajes devueltos |
+  | `hayMas` | boolean | `true` si hay más páginas (se devolvieron exactamente 10) |
+  > **Uso en Flutter:** para cargar más mensajes al hacer scroll hacia arriba, usa `antes = mensajes.last.id`.
+
+---
+
+### POST /chat/ia — Enviar mensaje a la IA (con tool calling)
+
+- **Autenticación:** SÍ
+- **Flujo multi-fase (búsquedas en cadena):**
+
+  **FASE 1 — El usuario envía un mensaje:**
+  ```json
+  {
+    "mensaje": "busca arroz barato",
+    "favoritos": [...]
+  }
+  ```
+  La IA tiene la función `buscarEnTiendas` disponible. Si decide usarla, el backend responde:
+  ```json
+  {
+    "action": "search",
+    "query": "arroz",
+    "toolCallId": "call_abc123",
+    "arguments": "{\"query\": \"arroz\"}"
+  }
+  ```
+  Si la IA no necesita buscar, responde normal:
+  ```json
+  {
+    "respuesta": "Claro, aquí tienes una receta..."
+  }
+  ```
+
+  **FASE 2 (y siguientes) — Flutter ejecuta la búsqueda y reenvía:**
+  Flutter recibe `action: "search"`, ejecuta `MarketApiService.buscarEnTiendas(query)` y envía:
+  ```json
+  {
+    "mensaje": "busca arroz barato",
+    "favoritos": [],
+    "resultadosBusqueda": [
+      {
+        "nombre": "Arroz Diana 500g",
+        "tienda": "Éxito",
+        "precio": 2500,
+        "link": "https://www.exito.com/arroz-diana/p"
+      },
+      {
+        "nombre": "Arroz Caribe 1kg",
+        "tienda": "Olímpica",
+        "precio": 3200,
+        "link": "https://www.olimpica.com/arroz-caribe/p"
+      }
+    ],
+    "toolCallId": "call_abc123",
+    "arguments": "{\"query\": \"arroz\"}",
+    "historialBusquedas": [
+      {
+        "toolCallId": "call_abc123",
+        "arguments": "{\"query\": \"arroz\"}",
+        "resultadosBusqueda": [
+          {
+            "nombre": "Arroz Diana 500g",
+            "tienda": "Éxito",
+            "precio": 2500,
+            "link": "https://www.exito.com/arroz-diana/p"
+          },
+          {
+            "nombre": "Arroz Caribe 1kg",
+            "tienda": "Olímpica",
+            "precio": 3200,
+            "link": "https://www.olimpica.com/arroz-caribe/p"
+          }
+        ]
+      }
+    ]
+  }
+  ```
+  El backend reconstruye la conversación completa con todas las rondas acumuladas en `historialBusquedas` y la IA vuelve a tener `buscarEnTiendas` disponible, por lo que puede **responder con datos reales** o **solicitar otra búsqueda** si necesita más información:
+
+  **La IA responde (sin más búsquedas):**
+  ```json
+  {
+    "respuesta": "Estos son los resultados para **arroz**:\n\n1. **Arroz Diana 500g** en Éxito: $2.500 COP\n2. **Arroz Caribe 1kg** en Olímpica: $3.200 COP\n\n¿Te gustaría que te recomiende una receta con alguno de estos?"
+  }
+  ```
+
+  **La IA solicita otra búsqueda (segundo producto):**
+  ```json
+  {
+    "action": "search",
+    "query": "aceite",
+    "toolCallId": "call_def456",
+    "arguments": "{\"query\": \"aceite\"}"
+  }
+  ```
+  En ese caso Flutter ejecuta la nueva búsqueda y repite la FASE 2, pero esta vez **acumula ambas rondas en `historialBusquedas`**:
+  ```json
+  {
+    "mensaje": "busca arroz y aceite",
+    "favoritos": [],
+    "resultadosBusqueda": [
+      {
+        "nombre": "Aceite Gourmet 900ml",
+        "tienda": "Éxito",
+        "precio": 8500,
+        "link": "https://www.exito.com/aceite-gourmet/p"
+      }
+    ],
+    "toolCallId": "call_def456",
+    "arguments": "{\"query\": \"aceite\"}",
+    "historialBusquedas": [
+      {
+        "toolCallId": "call_abc123",
+        "arguments": "{\"query\": \"arroz\"}",
+        "resultadosBusqueda": [
+          { "nombre": "Arroz Diana 500g", "tienda": "Éxito", "precio": 2500, "link": "..." },
+          { "nombre": "Arroz Caribe 1kg", "tienda": "Olímpica", "precio": 3200, "link": "..." }
+        ]
+      },
+      {
+        "toolCallId": "call_def456",
+        "arguments": "{\"query\": \"aceite\"}",
+        "resultadosBusqueda": [
+          { "nombre": "Aceite Gourmet 900ml", "tienda": "Éxito", "precio": 8500, "link": "..." }
+        ]
+      }
+    ]
+  }
+  ```
+  El ciclo se repite hasta que la IA decida responder. **IMPORTANTE:** Cada nueva ronda debe incluir TODAS las rondas anteriores en `historialBusquedas` para que la IA tenga contexto completo y no se quede en un bucle.
+
+- **Campos del request:**
+  | Campo | Tipo | Obligatorio | Descripción |
+  |---|---|---|---|
+  | `mensaje` | string | sí | Texto del usuario |
+  | `favoritos` | array | No | Contexto de productos favoritos. Cada item: `{ nombre, tienda, precio, hasProtein }` |
+  | `resultadosBusqueda` | array | No (FASE 2+) | Resultados de MarketApiService. Cada item: `{ nombre, tienda, precio, link }` |
+  | `toolCallId` | string | No (FASE 2+) | ID del tool_call devuelto en la fase anterior |
+  | `arguments` | string | No (FASE 2+) | Argumentos JSON del tool_call devuelto en la fase anterior |
+  | `historialBusquedas` | array | No (FASE 2+) | Historial acumulado de todas las rondas de búsqueda. Cada item: `{ toolCallId, arguments, resultadosBusqueda }`. Imprescindible para búsquedas múltiples — sin esto la IA pierde el contexto de rondas anteriores y entra en bucle. |
+
+- **Contexto conversacional:**
+   - La IA recibe automáticamente el **último intercambio** del chat (mensaje anterior del usuario + respuesta de la IA) como parte del historial de mensajes. Esto le permite mantener coherencia conversacional sin necesidad de enviar todo el historial.
+   - El contexto se obtiene de la BD y se inyecta antes del mensaje actual en ambas fases (FASE 1 y FASE 2+).
+   - Si no hay historial previo (primer mensaje del usuario), simplemente no se incluye contexto adicional.
+- **Flujo interno:**
+   - FASE 1: Guarda el mensaje del usuario en BD, consulta a OpenRouter con tools y contexto del último intercambio, devuelve `action` o `respuesta`
+   - FASE 2+: NO guarda el mensaje otra vez, reconstruye el tool_call, consulta a OpenRouter **con tools** y contexto, guarda la respuesta final solo cuando la IA responde texto
+- **Error 500 (OpenRouter falla):**
+  ```json
+  {
+    "mensaje": "Error al obtener respuesta de la IA"
+  }
+  ```
+
+---
+
+## 4. Productos (Historial de precios)
+
+Base: `/productos`
+
+### GET /productos/{productId}/precios — Historial de precios
+
+- **Autenticación:** NO (público)
+- **Response 200:**
+  ```json
+  {
+    "productId": "prod_abc_123",
+    "historial": [
+      {
+        "id": 3,
+        "productId": "prod_abc_123",
+        "precio": 12500.0,
+        "fechaGuardado": "2024-06-03T09:15:00"
+      },
+      {
+        "id": 2,
+        "productId": "prod_abc_123",
+        "precio": 12000.0,
+        "fechaGuardado": "2024-06-01T10:30:00"
+      }
+    ]
+  }
+  ```
+  > Ordenado por `fechaGuardado` descendente. Si no hay precios: `"historial": []`.
+- **Estructura de cada `PrecioHistorico`:**
+
+  | Campo | Tipo | Descripción |
+  |---|---|---|
+  | `id` | number | ID autogenerado |
+  | `productId` | string | ID del producto |
+  | `precio` | number | Precio en la moneda local |
+  | `fechaGuardado` | string (ISO 8601) | `yyyy-MM-ddTHH:mm:ss` (zona horaria: America/Bogota) |
+
+---
+
+### POST /productos/{productId}/precios — Agregar precio
+
+- **Autenticación:** NO (público)
+- **Request:**
+  ```json
+  {
+    "precio": 123400.0
+  }
+  ```
+- **Response 201:**
+  ```json
+  {
+    "mensaje": "Precio agregado correctamente",
+    "precio": {
+      "id": 3,
+      "productId": "prod_abc_123",
+      "precio": 123400.0,
+      "fechaGuardado": "2024-06-03T09:15:00"
+    }
+  }
+  ```
+
+---
+
+## 5. Cifrado extremo a extremo (Obligatorio)
+
+> ⚠️ **Toda comunicación con body (request y response) debe ir cifrada.** Si envías JSON plano, el backend responderá con **400 Bad Request** (`CifradoRequeridoException`).
+
+### Flujo
+
+1. **Obtener clave pública** → `GET /usuarios/public-key` (única respuesta en texto plano)
+2. El cliente genera una **clave AES de 128 bits** (16 bytes) aleatoria y un **IV** (16 bytes)
+3. El cliente cifra la clave AES con RSA (clave pública, OAEP/SHA-256) → `encryptedAesKey` (Base64)
+4. El cliente cifra el payload JSON con AES-128-CBC → `encryptedData` (Base64)
+5. Se envía al servidor:
+   ```json
+   {
+     "encryptedAesKey": "base64...",
+     "iv": "base64...",
+     "encryptedData": "base64..."
+   }
+   ```
+6. El backend descifra el payload con RSA (privada) + AES, procesa la petición, y **cifra la respuesta** con la misma clave AES + IV
+7. La respuesta llega cifrada (sin `encryptedAesKey`):
+   ```json
+   {
+     "iv": "base64...",
+     "encryptedData": "base64..."
+   }
+   ```
+
+### Flutter
+> **Librerías recomendadas para Flutter:** [`pointycastle`](https://pub.dev/packages/pointycastle) (RSA + AES) y `convert` + `dart:convert` (Base64/hex).
+
+### Endpoints exceptuados del cifrado
+
+| Endpoint | Request | Response |
+|---|---|---|
+| `GET /usuarios/public-key` | Sin body | **Texto plano** (n, e) |
+| Todos los demás | **Cifrado** (obligatorio) | **Cifrado** |
+
+---
+
+## 6. Resumen de autenticación por endpoint
+
+| Endpoint | Auth | Rol | Propietario |
+|---|---|---|---|
+| `POST /auth/refresh` | ❌ | — | — |
+| `POST /usuarios/` | ❌ | — | — |
+| `POST /usuarios/login` | ❌ | — | — |
+| `GET /usuarios/public-key` | ❌ | — | — |
+| `GET /productos/{pid}/precios` | ❌ | — | — |
+| `POST /productos/{pid}/precios` | ❌ | — | — |
+| `GET /usuarios/` | ✅ | `ROLE_ADMIN` | — |
+| `GET /usuarios/page/{page}` | ✅ | `ROLE_ADMIN` | — |
+| `GET /usuarios/{id}` | ✅ | Cualquiera | — |
+| `PUT /usuarios/{id}` | ✅ | Cualquiera | ✅ (owner o admin) |
+| `DELETE /usuarios/{id}` | ✅ | Cualquiera | ✅ (owner o admin) |
+| `PATCH /usuarios/{id}/favoritos` | ✅ | Cualquiera | ✅ (owner o admin) |
+| `GET /chat/mensajes` | ✅ | Cualquiera | Alcance al token |
+| `POST /chat/ia` | ✅ | Cualquiera | Alcance al token |
+
+> **Propietario** = el email del JWT coincide con el email del usuario objetivo. **Admin** = `ROLE_ADMIN` puede modificar cualquier usuario.
+
+---
+
+## 7. Códigos de error comunes
+
+| Código | Significado | Formato |
+|---|---|---|
+| **400** | Validación de campos, email duplicado, o **cifrado faltante** | `{ "mensaje"/"error": "...", "error": [...] }` |
+| **401** | Token faltante o inválido | Respuesta por defecto de Spring Security |
+| **403** | Acceso denegado (rol insuficiente / no es propietario) | `{ "error": "Acceso denegado: ...", "status": 403 }` |
+| **404** | Recurso no encontrado | `{ "error": "... no fue encontrado.", "status": 404 }` |
+| **500** | Error interno (credenciales inválidas, BD, OpenRouter, **fallo de descifrado**) | `{ "error/mensaje": "...", "status": 500 }` |
+
+---
+
+## 8. Esquema BD (solo referencia)
+
+```sql
+-- Tabla principal de usuarios
+CREATE TABLE usuarios (
+    id BIGSERIAL PRIMARY KEY,
+    nombre VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    fecha_nacimiento DATE NOT NULL,
+    role VARCHAR(50) NOT NULL DEFAULT 'ROLE_USER'
+);
+
+-- Favoritos del usuario
+CREATE TABLE usuario_favoritos (
+    usuario_id BIGINT NOT NULL REFERENCES usuarios(id),
+    product_id TEXT NOT NULL,
+    notificaciones BOOLEAN NOT NULL DEFAULT FALSE,
+    has_protein BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+-- Mensajes del chat con IA
+CREATE TABLE mensajes_chat (
     id BIGSERIAL PRIMARY KEY,
     usuario_id BIGINT NOT NULL,
     contenido TEXT NOT NULL,
     es_ia BOOLEAN NOT NULL
-  );
-  ```
+);
 
-**7) Notas de seguridad / recomendaciones para frontend**
-- Guardado de tokens:
-  - `access token` (JWT): preferiblemente mantener en memoria y reenviar en `Authorization` header.
-  - `refresh token`: idealmente en `HttpOnly`, `Secure` cookie (si backend lo soporta) para reducir riesgo XSS; si no, guardarlo en almacenamiento seguro del cliente con precaución.
-- El `refresh` devuelve siempre un nuevo `access token` y un nuevo `refresh token` (rotación) — actualizar ambos en el cliente luego de renovar.
-- Los `refresh tokens` expiran (7 días por defecto). Si se cambian secretos/en configuración, invalidar tokens o forzar relogin.
+-- Refresh tokens (hash almacenado)
+CREATE TABLE refresh_tokens (
+    id BIGSERIAL PRIMARY KEY,
+    token VARCHAR(255) NOT NULL UNIQUE,
+    usuario_id BIGINT NOT NULL REFERENCES usuarios(id),
+    fecha_expiracion TIMESTAMP NOT NULL,
+    revocado BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+-- Historial de precios de productos
+CREATE TABLE precio_historico (
+    id BIGSERIAL PRIMARY KEY,
+    product_id VARCHAR(255) NOT NULL,
+    precio DOUBLE PRECISION NOT NULL,
+    fecha_guardado TIMESTAMP NOT NULL
+);
+```

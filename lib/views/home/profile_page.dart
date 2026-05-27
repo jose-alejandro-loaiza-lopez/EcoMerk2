@@ -74,69 +74,142 @@ class _ProfilePageState extends State<ProfilePage>
     final editNombreCtrl = TextEditingController(text: _nombreController.text);
     final editEmailCtrl = TextEditingController(text: _emailController.text);
     final editPasswordCtrl = TextEditingController();
-    final editFechaCtrl = TextEditingController(
-      text: _usuario?['fechaNacimiento'] ?? '',
-    );
+    String editFechaNacimiento = _usuario?['fechaNacimiento'] ?? '';
+    bool obscurePassword = true;
 
     final resultado = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.edit_rounded, color: Color(0xFF1D9E75), size: 22),
-            SizedBox(width: 8),
-            Text(
-              'Editar perfil',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
             children: [
-              _buildEditField(
-                editNombreCtrl,
-                'Nombre',
-                Icons.person_outline_rounded,
-              ),
-              const SizedBox(height: 12),
-              _buildEditField(editEmailCtrl, 'Correo', Icons.email_outlined),
-              const SizedBox(height: 12),
-              _buildEditField(
-                editPasswordCtrl,
-                'Nueva contraseña',
-                Icons.lock_outline_rounded,
-                obscure: true,
-                hint: 'Mínimo 8 caracteres',
-              ),
-              const SizedBox(height: 12),
-              _buildEditField(
-                editFechaCtrl,
-                'Fecha de nacimiento',
-                Icons.cake_outlined,
-                hint: 'yyyy-MM-dd',
+              Icon(Icons.edit_rounded, color: Color(0xFF1D9E75), size: 22),
+              SizedBox(width: 8),
+              Text(
+                'Editar perfil',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1D9E75),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildEditField(
+                  editNombreCtrl,
+                  'Nombre',
+                  Icons.person_outline_rounded,
+                ),
+                const SizedBox(height: 12),
+                _buildEditField(editEmailCtrl, 'Correo', Icons.email_outlined),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: editPasswordCtrl,
+                  obscureText: obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: 'Nueva contraseña',
+                    hintText: 'Mínimo 8 caracteres',
+                    prefixIcon: const Icon(
+                      Icons.lock_outline_rounded,
+                      color: Color(0xFF1D9E75),
+                      size: 20,
+                    ),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        obscurePassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
+                        color: const Color(0xFF1D9E75),
+                        size: 20,
+                      ),
+                      onPressed: () => setDialogState(
+                        () => obscurePassword = !obscurePassword,
+                      ),
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF1D9E75),
+                        width: 2,
+                      ),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  readOnly: true,
+                  controller: TextEditingController(text: editFechaNacimiento),
+                  onTap: () async {
+                    final fecha = await showDatePicker(
+                      context: context,
+                      initialDate: _parseFecha(editFechaNacimiento),
+                      firstDate: DateTime(1950),
+                      lastDate: DateTime.now(),
+                    );
+                    if (fecha != null) {
+                      setDialogState(() {
+                        editFechaNacimiento =
+                            '${fecha.year}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}';
+                      });
+                    }
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Fecha de nacimiento',
+                    hintText: 'Selecciona tu fecha',
+                    prefixIcon: const Icon(
+                      Icons.cake_outlined,
+                      color: Color(0xFF1D9E75),
+                      size: 20,
+                    ),
+                    suffixIcon: const Icon(
+                      Icons.calendar_today,
+                      color: Color(0xFF1D9E75),
+                      size: 18,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF1D9E75),
+                        width: 2,
+                      ),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            child: const Text('Guardar', style: TextStyle(color: Colors.white)),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1D9E75),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text('Guardar', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
       ),
     );
 
@@ -148,7 +221,7 @@ class _ProfilePageState extends State<ProfilePage>
       if (editNombreCtrl.text.trim().isEmpty ||
           editEmailCtrl.text.trim().isEmpty ||
           editPasswordCtrl.text.isEmpty ||
-          editFechaCtrl.text.trim().isEmpty) {
+          editFechaNacimiento.trim().isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -200,7 +273,7 @@ class _ProfilePageState extends State<ProfilePage>
         nombre: editNombreCtrl.text.trim(),
         email: editEmailCtrl.text.trim(),
         password: editPasswordCtrl.text,
-        fechaNacimiento: editFechaCtrl.text.trim(),
+        fechaNacimiento: editFechaNacimiento.trim(),
       );
 
       if (mounted) {
@@ -221,6 +294,16 @@ class _ProfilePageState extends State<ProfilePage>
         }
       }
     }
+  }
+
+  DateTime _parseFecha(String fecha) {
+    try {
+      final parts = fecha.split('-');
+      if (parts.length == 3) {
+        return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+      }
+    } catch (_) {}
+    return DateTime(2000);
   }
 
   Widget _buildEditField(

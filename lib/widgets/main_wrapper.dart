@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../data/services/navigation_mode_service.dart';
+import '../views/home/chat_page.dart';
 
 class MainWrapper extends StatefulWidget {
   final Widget child;
@@ -110,11 +111,17 @@ class _MainWrapperState extends State<MainWrapper> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _buildNavItem(
-                      Icons.auto_awesome_rounded,
-                      'IA',
-                      currentIndex == 3,
-                      () => _onItemTapped(3, context),
+                    ValueListenableBuilder<bool>(
+                      valueListenable: ChatPage.respuestaPendiente,
+                      builder: (context, pendiente, _) {
+                        return _buildNavItem(
+                          Icons.auto_awesome_rounded,
+                          'IA',
+                          currentIndex == 3,
+                          () => _onItemTapped(3, context),
+                          showBadge: pendiente,
+                        );
+                      },
                     ),
                     _buildNavItem(
                       Icons.person_rounded,
@@ -136,8 +143,9 @@ class _MainWrapperState extends State<MainWrapper> {
     IconData icon,
     String label,
     bool activo,
-    VoidCallback onTap,
-  ) {
+    VoidCallback onTap, {
+    bool showBadge = false,
+  }) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -152,10 +160,38 @@ class _MainWrapperState extends State<MainWrapper> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              color: activo ? const Color(0xFF1D9E75) : const Color(0xFF888780),
-              size: 22,
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(
+                  icon,
+                  color: activo ? const Color(0xFF1D9E75) : const Color(0xFF888780),
+                  size: 22,
+                ),
+                if (showBadge && !activo)
+                  Positioned(
+                    right: -5,
+                    top: -5,
+                    child: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Center(
+                        child: Text(
+                          '!',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 3),
             Text(
