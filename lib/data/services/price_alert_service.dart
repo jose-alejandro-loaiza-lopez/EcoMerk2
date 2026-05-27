@@ -4,9 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'market_api_service.dart';
 import 'notification_service.dart';
 
-/// Umbral mínimo de bajada de precio (en porcentaje) para disparar una alerta.
-const double kPriceAlertThresholdPct = 5.0;
-
 /// Clave usada en [SharedPreferences] para persistir el mapa de alertas.
 const String _kPrefsKey = 'price_alerts';
 
@@ -60,7 +57,7 @@ class PriceAlertService {
 
   /// Verifica todos los productos suscritos contra los precios actuales.
   ///
-  /// Para cada producto cuyo precio bajó ≥ [kPriceAlertThresholdPct]%,
+  /// Para cada producto cuyo precio haya cambiado (subido o bajado),
   /// dispara una notificación local y actualiza el precio de referencia.
   ///
   /// Diseñado para ser llamado desde [Workmanager] o manualmente.
@@ -93,13 +90,15 @@ class PriceAlertService {
           'variación=${variacion.toStringAsFixed(1)}%',
         );
 
-        if (variacion >= kPriceAlertThresholdPct) {
-          // Disparar notificación
+        if (variacion != 0) {
+          final subio = variacion < 0;
+
           await NotificationService.instance.mostrarAlertaDePrecio(
             nombre: nombre,
             tienda: tienda,
             precioAntes: precioReferencia,
             precioAhora: precioActual,
+            subio: subio,
           );
 
           // Actualizar precio de referencia al nuevo precio
