@@ -4,6 +4,7 @@ import '../../controllers/auth/register_controller.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
+
   @override
   State<RegisterPage> createState() => _RegisterPageState();
 }
@@ -12,6 +13,8 @@ class _RegisterPageState extends State<RegisterPage> {
   final _controller = RegisterController();
   bool _loading = false;
   bool _obscurePassword = true;
+  bool _acceptedLegalTerms = false;
+  bool _showLegalTermsError = false;
 
   Future<void> _handleRegister() async {
     if (_controller.nombreController.text.isEmpty ||
@@ -24,6 +27,18 @@ class _RegisterPageState extends State<RegisterPage> {
       return;
     }
 
+    if (!_acceptedLegalTerms) {
+      setState(() => _showLegalTermsError = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Debes aceptar los términos y la política de datos para crear tu cuenta.',
+          ),
+        ),
+      );
+      return;
+    }
+
     setState(() => _loading = true);
     final result = await _controller.registrar();
     setState(() => _loading = false);
@@ -31,7 +46,7 @@ class _RegisterPageState extends State<RegisterPage> {
     if (result['exito']) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('¡Cuenta creada exitosamente!'),
+          content: Text('Cuenta creada exitosamente.'),
           backgroundColor: Colors.green,
         ),
       );
@@ -59,6 +74,49 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
+  void _mostrarDocumentoLegal(String titulo, String contenido) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(titulo),
+        content: SingleChildScrollView(
+          child: Text(
+            contenido,
+            style: const TextStyle(height: 1.35),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _mostrarTerminos() {
+    _mostrarDocumentoLegal(
+      'Términos y condiciones',
+      'Al crear una cuenta en Ecomerk2 aceptas usar la plataforma de forma '
+          'responsable, suministrar información veraz y proteger tus '
+          'credenciales de acceso. Ecomerk2 puede actualizar sus servicios, '
+          'precios, disponibilidad de productos y funcionalidades para mejorar '
+          'la experiencia del usuario.',
+    );
+  }
+
+  void _mostrarPoliticaDatos() {
+    _mostrarDocumentoLegal(
+      'Política de manejo de datos',
+      'Ecomerk2 utiliza tus datos personales para crear y administrar tu '
+      'cuenta, autenticar tu acceso, personalizar tu experiencia y '
+      'gestionar funcionalidades como favoritos, alertas y perfil. Tus '
+          'datos se tratan bajo medidas de seguridad y no se solicitan más '
+          'datos de los necesarios para operar el servicio.',
+    );
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -75,66 +133,79 @@ class _RegisterPageState extends State<RegisterPage> {
           child: Column(
             children: [
               const SizedBox(height: 60),
-              // Logo
               Center(
-                child: Column(children: [
-                  const Text('🛒', style: TextStyle(fontSize: 48)),
-                  const SizedBox(height: 8),
-                  const Text('EcoMerca2',
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
+                child: Column(
+                  children: [
+                    const Icon(
+                      Icons.shopping_cart_outlined,
+                      size: 48,
                       color: Color(0xFF0F6E56),
-                    )),
-                  const SizedBox(height: 4),
-                  const Text('Crea tu cuenta gratis',
-                    style: TextStyle(color: Colors.grey, fontSize: 13)),
-                ]),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Ecomerk2',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F6E56),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Crea tu cuenta gratis',
+                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 40),
-              // Tarjeta
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black12, blurRadius: 10)
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black12, blurRadius: 10),
                   ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Crear cuenta',
+                    const Text(
+                      'Crear cuenta',
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w600,
-                      )),
+                      ),
+                    ),
                     const SizedBox(height: 20),
-                    // Nombre
-                    const Text('Nombre completo',
+                    const Text(
+                      'Nombre completo',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                      )),
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     TextField(
                       controller: _controller.nombreController,
                       decoration: InputDecoration(
                         hintText: 'Tu nombre',
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                         filled: true,
                         fillColor: const Color(0xFFFAFAFA),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // Email
-                    const Text('Correo electrónico',
+                    const Text(
+                      'Correo electrónico',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                      )),
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     TextField(
                       controller: _controller.emailController,
@@ -142,44 +213,51 @@ class _RegisterPageState extends State<RegisterPage> {
                       decoration: InputDecoration(
                         hintText: 'tucorreo@gmail.com',
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                         filled: true,
                         fillColor: const Color(0xFFFAFAFA),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // Contraseña
-                    const Text('Contraseña',
+                    const Text(
+                      'Contraseña',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                      )),
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     TextField(
                       controller: _controller.passwordController,
                       obscureText: _obscurePassword,
                       decoration: InputDecoration(
-                        hintText: '••••••••',
+                        hintText: '********',
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                         filled: true,
                         fillColor: const Color(0xFFFAFAFA),
                         suffixIcon: IconButton(
-                          icon: Icon(_obscurePassword
-                            ? Icons.visibility_off
-                            : Icons.visibility),
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                          ),
                           onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword),
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                         ),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // Fecha de nacimiento
-                    const Text('Fecha de nacimiento',
+                    const Text(
+                      'Fecha de nacimiento',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                      )),
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     TextField(
                       controller: _controller.fechaNacController,
@@ -188,15 +266,105 @@ class _RegisterPageState extends State<RegisterPage> {
                       decoration: InputDecoration(
                         hintText: 'Selecciona tu fecha',
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                         filled: true,
                         fillColor: const Color(0xFFFAFAFA),
-                        suffixIcon: const Icon(Icons.calendar_today,
-                            color: Color(0xFF1D9E75)),
+                        suffixIcon: const Icon(
+                          Icons.calendar_today,
+                          color: Color(0xFF1D9E75),
+                        ),
                       ),
                     ),
+                    const SizedBox(height: 18),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFAFAFA),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: _showLegalTermsError
+                              ? Colors.red
+                              : Colors.black12,
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 10,
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Checkbox(
+                              value: _acceptedLegalTerms,
+                              activeColor: const Color(0xFF1D9E75),
+                              onChanged: (value) {
+                                setState(() {
+                                  _acceptedLegalTerms = value ?? false;
+                                  if (_acceptedLegalTerms) {
+                                    _showLegalTermsError = false;
+                                  }
+                                });
+                              },
+                            ),
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    const Text(
+                                      'Acepto los ',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
+                                    InkWell(
+                                      onTap: _mostrarTerminos,
+                                      child: const Text(
+                                        'términos y condiciones',
+                                        style: TextStyle(
+                                          color: Color(0xFF1D9E75),
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                      ),
+                                    ),
+                                    const Text(
+                                      ' y la ',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
+                                    InkWell(
+                                      onTap: _mostrarPoliticaDatos,
+                                      child: const Text(
+                                        'política de manejo de datos',
+                                        style: TextStyle(
+                                          color: Color(0xFF1D9E75),
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                      ),
+                                    ),
+                                    const Text(
+                                      '.',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (_showLegalTermsError) ...[
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Debes aceptar para continuar con el registro.',
+                        style: TextStyle(color: Colors.red, fontSize: 12),
+                      ),
+                    ],
                     const SizedBox(height: 24),
-                    // Botón
                     SizedBox(
                       width: double.infinity,
                       height: 50,
@@ -205,20 +373,23 @@ class _RegisterPageState extends State<RegisterPage> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF1D9E75),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                         child: _loading
-                          ? const CircularProgressIndicator(
-                              color: Colors.white)
-                          : const Text('Crear cuenta',
-                              style: TextStyle(
-                                fontSize: 16,
+                            ? const CircularProgressIndicator(
                                 color: Colors.white,
-                              )),
+                              )
+                            : const Text(
+                                'Crear cuenta',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                ),
+                              ),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // Link login
                     Center(
                       child: GestureDetector(
                         onTap: () => context.pop(),
