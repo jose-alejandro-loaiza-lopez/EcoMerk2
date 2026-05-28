@@ -57,7 +57,7 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(children: [
                    const Text('🛒', style: TextStyle(fontSize: 48)),
                   const SizedBox(height: 8),
-                  const Text('EcoMerca2',
+                  const Text('Ecomerk2',
                     style: TextStyle(
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
