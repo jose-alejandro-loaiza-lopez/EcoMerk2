@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:ecomerk2/data/services/navigation_mode_service.dart';
 import 'package:ecomerk2/data/services/market_api_service.dart';
 import 'package:ecomerk2/data/services/user_api_service.dart';
 import 'package:ecomerk2/data/services/product_api_service.dart';
 import 'package:ecomerk2/data/services/local_inference_service.dart';
+import 'package:ecomerk2/data/services/chat_api_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SearchPage extends StatefulWidget {
@@ -23,6 +26,12 @@ class _SearchPageState extends State<SearchPage> {
   Set<String> _tiendasSeleccionadas = {};
   Set<String> _enFavoritos = {};
 
+  final TextEditingController _listaController = TextEditingController();
+  List<String> _listaCompras = [];
+  bool _procesandoLista = false;
+  bool _buscandoEnTiendas = false;
+  String? _respuestaLista;
+
   @override
   void initState() {
     super.initState();
@@ -33,6 +42,12 @@ class _SearchPageState extends State<SearchPage> {
         _ejecutarBusqueda(nuevaBusqueda: true);
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _listaController.dispose();
+    super.dispose();
   }
 
   Future<void> _cargarFavoritosPreviamenteGuardados() async {
@@ -494,31 +509,12 @@ class _SearchPageState extends State<SearchPage> {
               ),
             ),
 
-          // Estado inicial
+          // Estado inicial con lista de compras o respuesta IA
           if (!_cargando && _controller.text.isEmpty)
-            const Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('🛒', style: TextStyle(fontSize: 48)),
-                    SizedBox(height: 16),
-                    Text(
-                      'Busca y compara precios',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Encuentra el mejor precio entre\nÉxito y Olímpica',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ),
+            Expanded(
+              child: _respuestaLista != null
+                  ? _buildRespuestaLista()
+                  : _buildListaCompras(),
             ),
 
           // Lista de resultados
@@ -795,6 +791,395 @@ class _SearchPageState extends State<SearchPage> {
           }
         }
       },
+    );
+  }
+
+  // ─── Shopping List Methods ─────────────────────────────────────
+
+  void _agregarALista() {
+    final item = _listaController.text.trim();
+    if (item.isEmpty) return;
+    setState(() {
+      _listaCompras.add(item);
+      _listaController.clear();
+    });
+  }
+
+  void _quitarDeLista(int index) {
+    setState(() {
+      _listaCompras.removeAt(index);
+    });
+  }
+
+  Future<void> _enviarListaIA() async {
+    if (_listaCompras.isEmpty) return;
+
+    setState(() {
+      _procesandoLista = true;
+      _respuestaLista = null;
+    });
+
+    final texto =
+        'Tengo la siguiente lista de compras: ${_listaCompras.join(", ")}. '
+        'Para cada producto de la lista, busca en las tiendas Éxito, Olímpica y Surtifamiliar '
+        'y dime cuál es la opción más económica para cada uno. '
+        'Luego dime cuál tienda tiene el total más bajo para toda la lista, '
+        'y cuánto sería el total a pagar en esa tienda. '
+        'Dame el desglose detallado producto por producto.';
+
+    try {
+      final data = await ChatApiService.preguntarIA(texto, []);
+
+      if (data == null) {
+        if (mounted) {
+          setState(() {
+            _respuestaLista =
+                'Lo siento, no pude procesar tu lista. Intenta de nuevo.';
+            _procesandoLista = false;
+          });
+        }
+        return;
+      }
+
+      if (data['action'] == 'search') {
+        await _procesarListaConIA(texto, data);
+      } else {
+        if (mounted) {
+          setState(() {
+            _respuestaLista = data['respuesta'] as String? ??
+                'Listo, revisa los precios en los resultados de búsqueda.';
+            _procesandoLista = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _respuestaLista =
+              'Ocurrió un error al procesar tu lista. Intenta de nuevo.';
+          _procesandoLista = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _procesarListaConIA(
+    String texto,
+    Map<String, dynamic> data,
+  ) async {
+    var query = data['query'] as String? ?? '';
+    var toolCallId = data['toolCallId'] as String? ?? '';
+    var arguments = data['arguments'] as String? ?? '';
+    final historialBusquedas = <Map<String, dynamic>>[];
+
+    while (true) {
+      if (mounted) setState(() => _buscandoEnTiendas = true);
+
+      final resultados = await MarketApiService.buscarEnTiendas(query);
+
+      final resultadosMapeados = resultados
+          .map((r) => {
+                'nombre': r['nombre'],
+                'tienda': r['tienda'],
+                'precio': r['precio'],
+                'link': r['link'],
+              })
+          .toList();
+
+      if (mounted) setState(() => _buscandoEnTiendas = false);
+
+      final response = await ChatApiService.reenviarConResultados(
+        mensaje: texto,
+        favoritos: [],
+        resultadosBusqueda: resultadosMapeados,
+        toolCallId: toolCallId,
+        arguments: arguments,
+        historialBusquedas: historialBusquedas,
+      );
+
+      if (response == null) {
+        if (mounted) {
+          setState(() {
+            _respuestaLista =
+                'Lo siento, no pude procesar tu lista. Intenta de nuevo.';
+            _procesandoLista = false;
+          });
+        }
+        return;
+      }
+
+      if (response['action'] != 'search') {
+        final textoRespuesta = response['respuesta'] as String? ??
+            'Listo, revisa los precios en los resultados de búsqueda.';
+        if (mounted) {
+          setState(() {
+            _respuestaLista = textoRespuesta;
+            _procesandoLista = false;
+          });
+        }
+        return;
+      }
+
+      historialBusquedas.add({
+        'toolCallId': toolCallId,
+        'arguments': arguments,
+        'resultadosBusqueda': resultadosMapeados,
+      });
+
+      query = response['query'] as String? ?? '';
+      toolCallId = response['toolCallId'] as String? ?? '';
+      arguments = response['arguments'] as String? ?? '';
+    }
+  }
+
+  // ─── Shopping List UI ──────────────────────────────────────────
+
+  Widget _buildListaCompras() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE1F5EE),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Icon(
+              Icons.shopping_basket_rounded,
+              color: Color(0xFF1D9E75),
+              size: 36,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Crea tu lista de compras',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Agrega productos uno a uno y encuentra el mejor precio',
+            style: TextStyle(color: Colors.grey[500], fontSize: 13),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _listaController,
+                  decoration: InputDecoration(
+                    hintText: 'Ej: arroz 1kg, huevos x30...',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF1D9E75),
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                  onSubmitted: (_) => _agregarALista(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: _agregarALista,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1D9E75),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                ),
+                child: const Icon(Icons.add, color: Colors.white),
+              ),
+            ],
+          ),
+          if (_listaCompras.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _listaCompras.asMap().entries.map((entry) {
+                return Chip(
+                  label: Text(entry.value),
+                  deleteIcon: const Icon(Icons.close, size: 18),
+                  onDeleted: () => _quitarDeLista(entry.key),
+                  backgroundColor: const Color(0xFFE1F5EE),
+                  deleteIconColor: const Color(0xFF0F6E56),
+                  labelStyle: const TextStyle(color: Color(0xFF0F6E56)),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _procesandoLista ? null : _enviarListaIA,
+                icon: _procesandoLista
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.auto_awesome_rounded),
+                label: Text(
+                  _procesandoLista
+                      ? 'Procesando...'
+                      : _buscandoEnTiendas
+                          ? 'Buscando en tiendas...'
+                          : 'Enviar lista a la IA',
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1D9E75),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: const Color(0xFF1D9E75).withOpacity(
+                    0.6,
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRespuestaLista() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE1F5EE),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.checklist_rounded,
+                  color: Color(0xFF1D9E75),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Resultado de tu lista',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8,
+                ),
+              ],
+            ),
+            child: MarkdownBody(
+              data: _respuestaLista ?? '',
+              styleSheet: MarkdownStyleSheet(
+                p: const TextStyle(color: Color(0xFF2C2C2A), fontSize: 14),
+                h3: const TextStyle(
+                  color: Color(0xFF1D9E75),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              onTapLink: (text, href, title) {
+                if (href != null) {
+                  launchUrl(
+                    Uri.parse(href),
+                    mode: LaunchMode.externalApplication,
+                  );
+                }
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (_listaCompras.isNotEmpty) ...[
+            const Text(
+              'Productos consultados:',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _listaCompras.map((item) {
+                return Chip(
+                  label: Text(item),
+                  backgroundColor: const Color(0xFFE1F5EE),
+                  labelStyle: const TextStyle(
+                    color: Color(0xFF0F6E56),
+                    fontSize: 12,
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _respuestaLista = null;
+                  _listaCompras.clear();
+                });
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Nueva lista'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF1D9E75),
+                side: const BorderSide(color: Color(0xFF1D9E75)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
